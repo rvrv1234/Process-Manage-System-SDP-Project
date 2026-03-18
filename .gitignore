@@ -1,0 +1,74 @@
+# ========================
+# GENERAL
+# ========================
+node_modules/
+.env
+.env.*
+*.log
+
+# ========================
+# BACKEND
+# ========================
+/backend/node_modules/
+/backend/.env
+
+# Debug / temporary scripts
+/backend/check_*
+/backend/inspect_*
+/backend/test_*
+/backend/debug_*
+/backend/schema_*
+/backend/verify_*
+/backend/seed_*
+/backend/diagnose_*
+/backend/migrate_*
+/backend/run_*
+/backend/find_*
+/backend/compare_*
+/backend/reset_*
+/backend/list_*
+/backend/get_*
+/backend/update_*
+/backend/cleanup_*
+/backend/reproduce_*
+
+# Debug outputs
+/backend/*.txt
+/backend/*.json
+
+# ========================
+# FRONTEND
+# ========================
+/frontend/node_modules/
+/frontend/.env
+/frontend/dist/
+/frontend/build/
+/frontend/.vite/
+
+# Frontend test/debug
+/frontend/test_*
+
+# ========================
+# ROOT LEVEL DEBUG FILES
+# ========================
+inspect_*
+*.txt
+*.json
+
+# ========================
+# IDE / SYSTEM FILES
+# ========================
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# Extra debug/migration scripts
+backend/*debug*.js
+backend/*inspect*.js
+backend/*fix*.js
+backend/*migrate*.js
+backend/*test*.js
+backend/*verify*.js
+backend/*trigger*.js
