@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import PaymentWrapper from '../../components/PaymentWrapper';
 import {
   MdDashboard, MdShoppingCart, MdInventory, MdPeople, MdFactory, MdLocalShipping, MdAssessment,
   MdNotifications, MdLogout, MdTrendingUp, MdAttachMoney, MdShowChart, MdAdd, MdVisibility,
@@ -176,9 +177,12 @@ export default function OwnerDashboard() {
   // --- API FUNCTIONS: MARKETPLACE (SUPPLIER MATERIALS) ---
   const [supplierMaterials, setSupplierMaterials] = useState([]);
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
+  const [showCartModal, setShowCartModal] = useState(false);
+  const [cart, setCart] = useState([]);
   const [activeMaterial, setActiveMaterial] = useState(null);
   const [purchaseQty, setPurchaseQty] = useState(1);
   const [purchasePaymentMethod, setPurchasePaymentMethod] = useState('cod');
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
 
   const fetchSupplierMaterials = async () => {
     try {
@@ -189,7 +193,7 @@ export default function OwnerDashboard() {
     }
   };
 
-  const handlePlaceMarketplaceOrder = async () => {
+  const handleAddToCart = () => {
     if (!activeMaterial) return;
     const qty = Number(purchaseQty);
     if (!qty || qty < 1) {
@@ -197,35 +201,114 @@ export default function OwnerDashboard() {
       return;
     }
 
+    const existingItemIndex = cart.findIndex(item => item.material_id === activeMaterial.material_id);
+    if (existingItemIndex >= 0) {
+      const newCart = [...cart];
+      newCart[existingItemIndex].quantity += qty;
+      setCart(newCart);
+    } else {
+      setCart([...cart, { ...activeMaterial, quantity: qty }]);
+    }
+    
+    alert(`${activeMaterial.name} added to cart!`);
+    setShowPurchaseModal(false);
+    setPurchaseQty(1);
+  };
+
+  const handleRemoveFromCart = (index) => {
+    const newCart = [...cart];
+    newCart.splice(index, 1);
+    setCart(newCart);
+  };
+
+  const calculateCartTotal = () => {
+    return cart.reduce((total, item) => total + (item.unit_cost * item.quantity), 0);
+  };
+
+  const handleCheckout = async () => {
+    if (cart.length === 0) return;
     if (purchasePaymentMethod === 'online') {
-      alert("Online Payment is currently unavailable. Please choose Cash on Delivery.");
+      setShowPaymentModal(true);
       return;
     }
 
     try {
-      const orderData = {
-        supplier_id: activeMaterial.supplier_id,
-        total_amount: activeMaterial.unit_cost * qty,
-        payment_method: purchasePaymentMethod,
-        items: [
-          {
-            material_id: activeMaterial.material_id,
-            quantity: qty,
-            unit_price: activeMaterial.unit_cost
-          }
-        ]
-      };
+      const ordersBySupplier = {};
+      cart.forEach(item => {
+        if (!ordersBySupplier[item.supplier_id]) {
+          ordersBySupplier[item.supplier_id] = {
+            supplier_id: item.supplier_id,
+            total_amount: 0,
+            items: []
+          };
+        }
+        ordersBySupplier[item.supplier_id].items.push({
+          material_id: item.material_id,
+          quantity: item.quantity,
+          unit_price: item.unit_cost
+        });
+        ordersBySupplier[item.supplier_id].total_amount += (item.unit_cost * item.quantity);
+      });
 
-      await axios.post('http://localhost:5000/api/suppliers/purchase', orderData);
-      alert('Purchase Order Placed Successfully!');
-      setShowPurchaseModal(false);
-      setPurchaseQty(1);
+      const promises = Object.values(ordersBySupplier).map(orderData => 
+        axios.post('http://localhost:5000/api/suppliers/purchase', {
+          ...orderData,
+          payment_method: purchasePaymentMethod
+        })
+      );
+
+      await Promise.all(promises);
+
+      alert('Purchase Orders Placed Successfully!');
+      setCart([]);
+      setShowCartModal(false);
       fetchSupplierMaterials();
       fetchPurchaseOrders(); // Refresh PO list for the Orders tab
     } catch (err) {
-      console.error("Purchase failed:", err);
+      console.error("Checkout failed:", err);
       const errorMessage = err.response?.data?.message || 'Failed to place purchase order.';
       alert(errorMessage);
+    }
+  };
+
+  const handlePaymentSuccess = async (transactionId) => {
+    try {
+      const ordersBySupplier = {};
+      cart.forEach(item => {
+        if (!ordersBySupplier[item.supplier_id]) {
+          ordersBySupplier[item.supplier_id] = {
+            supplier_id: item.supplier_id,
+            total_amount: 0,
+            items: []
+          };
+        }
+        ordersBySupplier[item.supplier_id].items.push({
+          material_id: item.material_id,
+          quantity: item.quantity,
+          unit_price: item.unit_cost
+        });
+        ordersBySupplier[item.supplier_id].total_amount += (item.unit_cost * item.quantity);
+      });
+
+      const promises = Object.values(ordersBySupplier).map(orderData => 
+        axios.post('http://localhost:5000/api/suppliers/purchase', {
+          ...orderData,
+          payment_method: purchasePaymentMethod,
+          transaction_id: transactionId,
+          status: 'Paid' // Can be overridden or used by backend depending on logic
+        })
+      );
+
+      await Promise.all(promises);
+      alert('Online Payment Successful! Supplier Purchase Orders Placed.');
+      setShowPaymentModal(false);
+      setCart([]);
+      setShowCartModal(false);
+      fetchSupplierMaterials();
+      fetchPurchaseOrders();
+    } catch (err) {
+      console.error("Error placing online order:", err);
+      alert('Payment succeeded but order creation failed. Please contact support.');
     }
   };
 
@@ -580,7 +663,20 @@ export default function OwnerDashboard() {
             <div style={{ marginTop: '40px', borderTop: '1px solid #e5e7eb', paddingTop: '30px' }}>
               <div style={styles.pageHeader}>
                 <div><h1 style={{ ...styles.pageTitle, fontSize: '22px' }}>Supplier Marketplace</h1><p style={styles.pageSubtitle}>Purchase raw materials from verified suppliers</p></div>
-                <div style={{ ...styles.statusBadge('#10b981') }}>Live Marketplace</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                  <div style={{ ...styles.statusBadge('#10b981') }}>Live Marketplace</div>
+                  <button 
+                    onClick={() => setShowCartModal(true)} 
+                    style={{ backgroundColor: '#3b82f6', color: 'white', padding: '8px 16px', borderRadius: '8px', fontWeight: '600', fontSize: '14px', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}
+                  >
+                    <MdShoppingCart size={18} /> Cart
+                    {cart.length > 0 && (
+                      <span style={{ position: 'absolute', top: '-8px', right: '-8px', backgroundColor: '#ef4444', color: 'white', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '11px', fontWeight: 'bold' }}>
+                        {cart.length}
+                      </span>
+                    )}
+                  </button>
+                </div>
               </div>
 
               <div style={styles.productGrid}>
@@ -1555,34 +1651,9 @@ export default function OwnerDashboard() {
                 />
               </div>
 
-              {/* PAYMENT METHOD SELECTION */}
-              <div style={{ ...styles.inputGroup, marginTop: '20px' }}>
-                <label style={styles.label}>Select Payment Method</label>
-                <div style={{ display: 'flex', gap: '15px', marginTop: '10px' }}>
-                  <div 
-                    onClick={() => setPurchasePaymentMethod('cod')}
-                    style={{
-                      flex: 1, padding: '12px', borderRadius: '8px', border: purchasePaymentMethod === 'cod' ? '2px solid #f59e0b' : '1px solid #e5e7eb',
-                      backgroundColor: purchasePaymentMethod === 'cod' ? '#fef3c7' : 'white', cursor: 'pointer', textAlign: 'center', transition: 'all 0.2s'
-                    }}
-                  >
-                    <div style={{ fontWeight: '600', fontSize: '14px', color: purchasePaymentMethod === 'cod' ? '#92400e' : '#374151' }}>Cash on Delivery</div>
-                  </div>
-                  <div 
-                    onClick={() => setPurchasePaymentMethod('online')}
-                    style={{
-                      flex: 1, padding: '12px', borderRadius: '8px', border: purchasePaymentMethod === 'online' ? '2px solid #f59e0b' : '1px solid #e5e7eb',
-                      backgroundColor: purchasePaymentMethod === 'online' ? '#fef3c7' : 'white', cursor: 'pointer', textAlign: 'center', transition: 'all 0.2s'
-                    }}
-                  >
-                    <div style={{ fontWeight: '600', fontSize: '14px', color: purchasePaymentMethod === 'online' ? '#92400e' : '#374151' }}>Online Payment</div>
-                  </div>
-                </div>
-              </div>
-
               <div style={{ marginTop: '25px', padding: '15px', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '14px', fontWeight: '600' }}>Total Amount:</span>
+                  <span style={{ fontSize: '14px', fontWeight: '600' }}>Item Total:</span>
                   <span style={{ fontSize: '18px', fontWeight: '700', color: '#10b981' }}>LKR {(activeMaterial.unit_cost * (Number(purchaseQty) || 0)).toLocaleString()}</span>
                 </div>
               </div>
@@ -1596,12 +1667,103 @@ export default function OwnerDashboard() {
                 Cancel
               </button>
               <button
-                onClick={handlePlaceMarketplaceOrder}
+                onClick={handleAddToCart}
                 style={{ flex: 1, padding: '12px', borderRadius: '8px', border: 'none', backgroundColor: '#10b981', color: 'white', fontWeight: '600', cursor: 'pointer' }}
               >
-                Place Order
+                Add to Cart
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL 7: CART MODAL --- */}
+      {showCartModal && (
+        <div style={styles.modalOverlay}>
+          <div style={{ ...styles.modalContent, width: '600px' }}>
+            <div style={styles.modalHeader}>
+              <h3 style={{ margin: 0, fontSize: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <MdShoppingCart color="#3b82f6" /> Your Cart
+              </h3>
+              <MdClose size={24} style={{ cursor: 'pointer', color: '#6b7280' }} onClick={() => setShowCartModal(false)} />
+            </div>
+
+            {cart.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px 20px', color: '#6b7280' }}>
+                <MdShoppingCart size={48} style={{ color: '#d1d5db', marginBottom: '10px' }} />
+                <p>Your cart is empty.</p>
+                <button onClick={() => setShowCartModal(false)} style={{ marginTop: '15px', backgroundColor: '#f9fafb', border: '1px solid #d1d5db', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer' }}>Browse Marketplace</button>
+              </div>
+            ) : (
+              <>
+                <div style={{ maxHeight: '300px', overflowY: 'auto', marginBottom: '20px' }}>
+                  {cart.map((item, index) => (
+                    <div key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', borderBottom: '1px solid #e5e7eb' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: '600', fontSize: '15px' }}>{item.name}</div>
+                        <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '2px' }}>{item.company_name}</div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontWeight: '600', color: '#111827' }}>{item.quantity} kg</div>
+                          <div style={{ fontSize: '12px', color: '#6b7280' }}>@ LKR {Number(item.unit_cost).toLocaleString()}</div>
+                        </div>
+                        <button onClick={() => handleRemoveFromCart(index)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}>
+                          <MdClose size={20} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* PAYMENT METHOD SELECTION */}
+                <div style={styles.inputGroup}>
+                  <label style={styles.label}>Select Payment Method</label>
+                  <div style={{ display: 'flex', gap: '15px', marginTop: '10px' }}>
+                    <div 
+                      onClick={() => setPurchasePaymentMethod('cod')}
+                      style={{
+                        flex: 1, padding: '12px', borderRadius: '8px', border: purchasePaymentMethod === 'cod' ? '2px solid #3b82f6' : '1px solid #e5e7eb',
+                        backgroundColor: purchasePaymentMethod === 'cod' ? '#eff6ff' : 'white', cursor: 'pointer', textAlign: 'center', transition: 'all 0.2s'
+                      }}
+                    >
+                      <div style={{ fontWeight: '600', fontSize: '14px', color: purchasePaymentMethod === 'cod' ? '#1e40af' : '#374151' }}>Cash on Delivery</div>
+                    </div>
+                    <div 
+                      onClick={() => setPurchasePaymentMethod('online')}
+                      style={{
+                        flex: 1, padding: '12px', borderRadius: '8px', border: purchasePaymentMethod === 'online' ? '2px solid #3b82f6' : '1px solid #e5e7eb',
+                        backgroundColor: purchasePaymentMethod === 'online' ? '#eff6ff' : 'white', cursor: 'pointer', textAlign: 'center', transition: 'all 0.2s'
+                      }}
+                    >
+                      <div style={{ fontWeight: '600', fontSize: '14px', color: purchasePaymentMethod === 'online' ? '#1e40af' : '#374151' }}>Online Payment</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ padding: '15px', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb', marginTop: '20px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '16px', fontWeight: '600' }}>Total Amount:</span>
+                    <span style={{ fontSize: '20px', fontWeight: '700', color: '#10b981' }}>LKR {calculateCartTotal().toLocaleString()}</span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '15px', marginTop: '20px' }}>
+                  <button
+                    onClick={() => setShowCartModal(false)}
+                    style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', backgroundColor: 'white', color: '#4b5563', fontWeight: '600', cursor: 'pointer' }}
+                  >
+                    Continue Shopping
+                  </button>
+                  <button
+                    onClick={handleCheckout}
+                    style={{ flex: 1, padding: '12px', borderRadius: '8px', border: 'none', backgroundColor: '#3b82f6', color: 'white', fontWeight: '600', cursor: 'pointer' }}
+                  >
+                    Checkout & Place Orders
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -1610,6 +1772,8 @@ export default function OwnerDashboard() {
       <footer style={styles.footer}>
         <div>© 2025 Hasal Products | Powered by Innovation and Flavor</div>
       </footer>
+
+      {showPaymentModal && <PaymentWrapper amount={calculateCartTotal()} onClose={() => setShowPaymentModal(false)} onPaymentSuccess={handlePaymentSuccess} />}
     </div>
   );
 }

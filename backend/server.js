@@ -4,24 +4,24 @@ require('dotenv').config();
 const pool = require('./config/db');
 const supplierRoutes = require('./routes/supplierRoutes');
 // 👇 NEW: Import the Product Routes for the catalog
-const productRoutes = require('./routes/productRoutes'); 
-const inventoryRoutes = require('./routes/inventoryRoutes'); 
+const productRoutes = require('./routes/productRoutes');
+const inventoryRoutes = require('./routes/inventoryRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
 
 
 // --- 1. IMPORT CONTROLLERS ---
 // We import Auth functions directly to ensure verifyEmail is accessible
-const { registerUser, loginUser, verifyEmail, forgotPassword, resetPassword } = require('./controllers/authController'); 
-const { getStaff, deleteStaff } = require('./controllers/staffController'); 
+const { registerUser, loginUser, verifyEmail, forgotPassword, resetPassword } = require('./controllers/authController');
+const { getStaff, deleteStaff } = require('./controllers/staffController');
 const { getPendingSuppliers, approveSupplier, rejectSupplier } = require('./controllers/adminController');
 const staffRoutes = require('./routes/staffRoutes');
 const productionRoutes = require('./routes/productionRoutes');
-
 const app = express();
-const orderRoutes = require('./routes/orderRoutes');
-const reportRoutes = require('./routes/reportRoutes');
-
 app.use(express.json());
 app.use(cors());
+
+const orderRoutes = require('./routes/orderRoutes');
+const reportRoutes = require('./routes/reportRoutes');
 
 
 // --- 2. DEFINE ROUTES ---
@@ -41,6 +41,7 @@ app.use('/api/products', productRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/production', productionRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/payments', paymentRoutes);
 
 
 // --- ADMIN ROUTES (Supplier Requests) ---
@@ -55,17 +56,17 @@ app.delete('/api/admin/staff/:id', deleteStaff);
 
 // --- TEST ROUTE ---
 app.get('/', async (req, res) => {
-    try {
-        const result = await pool.query('SELECT NOW()');
-        res.send(`API Running! Database Time: ${result.rows[0].now}`);
-    } catch (err) {
-        console.error(err);
-        res.status(500).send('Database connection error');
-    }
+    try {
+        const result = await pool.query('SELECT NOW()');
+        res.send(`API Running! Database Time: ${result.rows[0].now}`);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Database connection error');
+    }
 });
 
 // --- 3. START SERVER ---
 const PORT = 5000;
 app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`🚀 Server running on port ${PORT}`);
 });

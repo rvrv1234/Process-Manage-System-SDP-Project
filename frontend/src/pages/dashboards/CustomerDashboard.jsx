@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 // Ensure this line includes 'useNavigate'
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import PaymentWrapper from '../../components/PaymentWrapper';
 
 import {
   MdDashboard,
@@ -35,6 +36,7 @@ export default function CustomerDashboard() {
   const [pastOrders, setPastOrders] = useState([]); // Track completed checkouts locally
   const [showProfileModal, setShowProfileModal] = useState(false); // Toggle for user profile visibility
   const [paymentMethod, setPaymentMethod] = useState('cod'); // 'cod' or 'online'
+  const [showPaymentModal, setShowPaymentModal] = useState(false); // Stripe modal
 
 
   // --- DYNAMIC CATALOG STATE ---
@@ -171,9 +173,8 @@ export default function CustomerDashboard() {
       return;
     }
 
-    // Only "Cash on Delivery" is supported for now. "Online Payment" does nothing.
     if (paymentMethod === 'online') {
-      console.log("Online payment selected - doing nothing as requested.");
+      setShowPaymentModal(true);
       return;
     }
 
@@ -203,6 +204,34 @@ export default function CustomerDashboard() {
       console.error("Error placing order:", err);
       const errorMessage = err.response?.data?.message || 'Failed to place order. Please try again.';
       alert(errorMessage);
+    }
+  };
+
+  const handlePaymentSuccess = async (transactionId) => {
+    const orderData = {
+      user_id: user.id,
+      total_amount: cartTotal,
+      payment_method: paymentMethod,
+      transaction_id: transactionId,
+      items: cartItems.map(item => ({
+        product_id: item.productId,
+        quantity: item.quantity,
+        unit_price: item.price,
+        packet_size: item.size
+      }))
+    };
+
+    try {
+      await axios.post('http://localhost:5000/api/orders/create', orderData);
+      alert('Online Payment Successful and Order Placed!');
+      setShowPaymentModal(false);
+      setCartItems([]);
+      setShowCartModal(false);
+      setActiveTab('orders');
+      fetchPastOrders();
+    } catch (err) {
+      console.error("Error placing online order:", err);
+      alert('Payment succeeded but order creation failed. Please contact support.');
     }
   };
 
@@ -930,7 +959,7 @@ export default function CustomerDashboard() {
                   <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '14px', padding: '8px', borderRadius: '8px', backgroundColor: paymentMethod === 'online' ? '#eff6ff' : 'transparent', border: paymentMethod === 'online' ? '1px solid #3b82f6' : '1px solid transparent' }}>
                     <input type="radio" name="paymentMethod" value="online" checked={paymentMethod === 'online'} onChange={() => setPaymentMethod('online')} style={{ accentColor: '#3b82f6' }} />
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontWeight: paymentMethod === 'online' ? '600' : '500' }}>Online Payment (Coming Soon)</span>
+                      <span style={{ fontWeight: paymentMethod === 'online' ? '600' : '500' }}>Online Payment</span>
                     </div>
                   </label>
                 </div>
@@ -940,7 +969,7 @@ export default function CustomerDashboard() {
                 <div style={{ fontSize: '16px', color: '#6b7280' }}>Total</div>
                 <div style={{ fontSize: '28px', fontWeight: '700' }}>LKR {cartTotal.toLocaleString()}</div>
               </div>
-              <button style={styles.checkoutBtn} disabled={cartItems.length === 0} onClick={handleCheckout}>Go to checkout</button>
+              <button style={styles.checkoutBtn} disabled={cartItems.length === 0} onClick={handleCheckout}>Place Order</button>
             </div>
           </div>
         </>
@@ -974,6 +1003,7 @@ export default function CustomerDashboard() {
         </div>
       )}
 
+      {showPaymentModal && <PaymentWrapper amount={cartTotal} onClose={() => setShowPaymentModal(false)} onPaymentSuccess={handlePaymentSuccess} />}
     </div>
   );
 }
