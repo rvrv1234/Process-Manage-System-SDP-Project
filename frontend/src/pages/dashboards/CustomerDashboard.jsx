@@ -211,8 +211,9 @@ export default function CustomerDashboard() {
     const orderData = {
       user_id: user.id,
       total_amount: cartTotal,
-      payment_method: paymentMethod,
+      payment_method: 'Online',
       transaction_id: transactionId,
+      status: 'PAID',
       items: cartItems.map(item => ({
         product_id: item.productId,
         quantity: item.quantity,

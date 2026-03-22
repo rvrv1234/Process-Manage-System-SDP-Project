@@ -7,6 +7,7 @@ const supplierRoutes = require('./routes/supplierRoutes');
 const productRoutes = require('./routes/productRoutes');
 const inventoryRoutes = require('./routes/inventoryRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
+const ownerPaymentRoutes = require('./routes/ownerPaymentRoutes');
 
 
 // --- 1. IMPORT CONTROLLERS ---
@@ -42,6 +43,7 @@ app.use('/api/inventory', inventoryRoutes);
 app.use('/api/production', productionRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/owner-payments', ownerPaymentRoutes);
 
 
 // --- ADMIN ROUTES (Supplier Requests) ---

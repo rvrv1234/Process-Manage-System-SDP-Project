@@ -1,8 +1,9 @@
 const pool = require('../config/db');
+const { logAudit } = require('../utils/auditLogger');
 
 // 1. Create a Customer Order
 const createCustomerOrder = async (req, res) => {
-    const { user_id, total_amount, items } = req.body; // items: [{ product_id, quantity, unit_price }]
+    const { user_id, total_amount, items, payment_method, transaction_id, status } = req.body; // items: [{ product_id, quantity, unit_price }]
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
@@ -33,10 +34,14 @@ const createCustomerOrder = async (req, res) => {
             }
         }
 
-        console.log("Inserting order for customer:", customer_id, "with status: PENDING and delivery_status: PROCESSING");
+        const orderStatus = status || 'PENDING';
+        const orderPaymentMethod = payment_method || 'cod';
+        const orderTransactionId = transaction_id || null;
+
+        console.log("Inserting order for customer:", customer_id, "with status:", orderStatus, "and delivery_status: PROCESSING");
         const orderResult = await client.query(
-            "INSERT INTO orders (customer_id, total_amount, status, delivery_status) VALUES ($1, $2, $3, $4) RETURNING order_id",
-            [customer_id, total_amount, 'PENDING', 'PROCESSING']
+            "INSERT INTO orders (customer_id, total_amount, status, transaction_id, payment_method, delivery_status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING order_id",
+            [customer_id, Number(total_amount), orderStatus, orderTransactionId, orderPaymentMethod, 'PROCESSING']
         );
         const orderId = orderResult.rows[0].order_id;
 
@@ -61,6 +66,12 @@ const createCustomerOrder = async (req, res) => {
             );
         }
         await client.query('COMMIT');
+        
+        // Audit Logging
+        if (user_id) {
+            await logAudit(pool, user_id, 'CUSTOMER_ORDER_CREATED', 'orders', orderId);
+        }
+
         res.status(201).json({ message: "Order Placed Successfully", order_id: orderId });
     } catch (err) {
         await client.query('ROLLBACK');

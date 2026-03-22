@@ -253,7 +253,7 @@ export default function OwnerDashboard() {
       const promises = Object.values(ordersBySupplier).map(orderData => 
         axios.post('http://localhost:5000/api/suppliers/purchase', {
           ...orderData,
-          payment_method: purchasePaymentMethod
+          payment_method: 'COD'
         })
       );
 
@@ -291,15 +291,18 @@ export default function OwnerDashboard() {
       });
 
       const promises = Object.values(ordersBySupplier).map(orderData => 
-        axios.post('http://localhost:5000/api/suppliers/purchase', {
-          ...orderData,
-          payment_method: purchasePaymentMethod,
+        axios.post('http://localhost:5000/api/owner-payments', {
+          supplier_id: orderData.supplier_id,
+          total_amount: orderData.total_amount,
+          status: 'Paid',
+          payment_method: 'Online',
           transaction_id: transactionId,
-          status: 'Paid' // Can be overridden or used by backend depending on logic
+          items: orderData.items // For potential future logic expansion
         })
       );
 
       await Promise.all(promises);
+
       alert('Online Payment Successful! Supplier Purchase Orders Placed.');
       setShowPaymentModal(false);
       setCart([]);
