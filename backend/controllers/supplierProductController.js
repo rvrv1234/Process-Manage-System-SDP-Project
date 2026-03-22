@@ -25,25 +25,6 @@ const placePurchaseOrder = async (req, res) => {
     try {
         await client.query('BEGIN');
 
-        // --- PURCHASE ORDER STOCK VALIDATION ---
-        for (const item of items) {
-            const stockCheck = await client.query(
-                "SELECT stock_level FROM rawmaterials WHERE material_id = $1",
-                [item.material_id]
-            );
-            
-            if (stockCheck.rows.length === 0) {
-                throw new Error(`Material ID ${item.material_id} not found`);
-            }
-            
-            const availableStock = parseFloat(stockCheck.rows[0].stock_level);
-            if (availableStock < item.quantity) {
-                res.status(400).json({ message: "Requested quantity exceeds available stock" });
-                await client.query('ROLLBACK');
-                return;
-            }
-        }
-
         // Create the PO
         const poResult = await client.query(
             "INSERT INTO purchase_orders (supplier_id, total_amount, status) VALUES ($1, $2, 'Pending') RETURNING po_id",
@@ -51,18 +32,11 @@ const placePurchaseOrder = async (req, res) => {
         );
         const poId = poResult.rows[0].po_id;
 
-        // Insert items and deduct stock
+        // Insert items (No stock deduction as per new requirement)
         for (const item of items) {
-            // INSERT PO item
             await client.query(
                 "INSERT INTO purchase_order_items (po_id, material_id, quantity, unit_price) VALUES ($1, $2, $3, $4)",
                 [poId, item.material_id, item.quantity, item.unit_price]
-            );
-
-            // DEDUCT stock from rawmaterials
-            await client.query(
-                "UPDATE rawmaterials SET stock_level = stock_level - $1 WHERE material_id = $2",
-                [item.quantity, item.material_id]
             );
         }
 
@@ -81,7 +55,7 @@ const placePurchaseOrder = async (req, res) => {
 const getAllPurchaseOrders = async (req, res) => {
     try {
         const result = await pool.query(`
-            SELECT po.po_id, po.order_date, po.total_amount, po.status, s.company_name,
+            SELECT po.po_id, po.order_date, po.total_amount, po.status, po.denial_reason, s.company_name,
                    STRING_AGG(rm.name, ', ') as items
             FROM purchase_orders po
             JOIN suppliers s ON po.supplier_id = s.supplier_id
@@ -102,7 +76,7 @@ const getSupplierPurchaseOrders = async (req, res) => {
     const { userId } = req.params;
     try {
         const result = await pool.query(`
-            SELECT po.po_id, po.order_date, po.total_amount, po.status,
+            SELECT po.po_id, po.order_date, po.total_amount, po.status, po.denial_reason,
                    STRING_AGG(rm.name || ' - ' || poi.quantity || ' units', ', ') as items_list
             FROM purchase_orders po
             JOIN suppliers s ON po.supplier_id = s.supplier_id
@@ -128,29 +102,12 @@ const updatePurchaseOrderStatus = async (req, res) => {
     try {
         await client.query('BEGIN');
 
-        // Check current status
-        const currentPO = await client.query("SELECT status FROM purchase_orders WHERE po_id = $1", [id]);
-        if (currentPO.rows.length === 0) {
-            await client.query('ROLLBACK');
-            return res.status(404).json({ message: "Order not found" });
-        }
-
-        const oldStatus = currentPO.rows[0].status;
-
-        // If newly rejected and wasn't already rejected, return stock
-        if (status === 'Rejected' && oldStatus !== 'Rejected') {
-            const items = await client.query("SELECT material_id, quantity FROM purchase_order_items WHERE po_id = $1", [id]);
-            for (const item of items.rows) {
-                await client.query(
-                    "UPDATE rawmaterials SET stock_level = stock_level + $1 WHERE material_id = $2",
-                    [item.quantity, item.material_id]
-                );
-            }
-        }
+        // If Rejected, we might have a reason
+        const { reason } = req.body;
 
         const result = await client.query(
-            "UPDATE purchase_orders SET status = $1 WHERE po_id = $2 RETURNING *",
-            [status, id]
+            "UPDATE purchase_orders SET status = $1, denial_reason = $2 WHERE po_id = $3 RETURNING *",
+            [status, status === 'Rejected' ? reason : null, id]
         );
 
         await client.query('COMMIT');
@@ -164,4 +121,59 @@ const updatePurchaseOrderStatus = async (req, res) => {
     }
 };
 
-module.exports = { getSupplierMaterials, placePurchaseOrder, getAllPurchaseOrders, updatePurchaseOrderStatus, getSupplierPurchaseOrders };
+// 5. Add a new Supplier Material
+const addSupplierMaterial = async (req, res) => {
+    const { supplier_id, name, unit_cost } = req.body;
+    const stock_level = 0; // Default stock level as it's not required from supplier now
+    try {
+        const result = await pool.query(
+            "INSERT INTO rawmaterials (supplier_id, name, stock_level, unit_cost) VALUES ($1, $2, $3, $4) RETURNING *",
+            [supplier_id, name, stock_level, unit_cost]
+        );
+        res.status(201).json({ message: "Material added successfully", material: result.rows[0] });
+    } catch (err) {
+        console.error("Error adding material:", err.message);
+        res.status(500).json({ message: "Server Error" });
+    }
+};
+
+// 6. Get materials for a specific supplier by user_id
+const getMyMaterials = async (req, res) => {
+    const { userId } = req.params;
+    try {
+        const result = await pool.query(`
+            SELECT rm.* 
+            FROM rawmaterials rm
+            JOIN suppliers s ON rm.supplier_id = s.supplier_id
+            WHERE s.user_id = $1
+            ORDER BY rm.name ASC
+        `, [userId]);
+        res.json(result.rows);
+    } catch (err) {
+        console.error("Error fetching my materials:", err.message);
+        res.status(500).json({ message: "Server Error" });
+    }
+};
+
+// 7. Delete a Supplier Material
+const deleteSupplierMaterial = async (req, res) => {
+    const { id } = req.params;
+    try {
+        await pool.query("DELETE FROM rawmaterials WHERE material_id = $1", [id]);
+        res.json({ message: "Material deleted successfully" });
+    } catch (err) {
+        console.error("Error deleting material:", err.message);
+        res.status(500).json({ message: "Server Error" });
+    }
+};
+
+module.exports = { 
+    getSupplierMaterials, 
+    placePurchaseOrder, 
+    getAllPurchaseOrders, 
+    updatePurchaseOrderStatus, 
+    getSupplierPurchaseOrders,
+    addSupplierMaterial,
+    getMyMaterials,
+    deleteSupplierMaterial
+};

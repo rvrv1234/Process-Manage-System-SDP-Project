@@ -178,6 +178,7 @@ export default function OwnerDashboard() {
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
   const [activeMaterial, setActiveMaterial] = useState(null);
   const [purchaseQty, setPurchaseQty] = useState(1);
+  const [purchasePaymentMethod, setPurchasePaymentMethod] = useState('cod');
 
   const fetchSupplierMaterials = async () => {
     try {
@@ -196,9 +197,8 @@ export default function OwnerDashboard() {
       return;
     }
 
-    // --- FRONTEND STOCK VALIDATION ---
-    if (qty > activeMaterial.stock_level) {
-      alert("Requested quantity exceeds available stock");
+    if (purchasePaymentMethod === 'online') {
+      alert("Online Payment is currently unavailable. Please choose Cash on Delivery.");
       return;
     }
 
@@ -206,6 +206,7 @@ export default function OwnerDashboard() {
       const orderData = {
         supplier_id: activeMaterial.supplier_id,
         total_amount: activeMaterial.unit_cost * qty,
+        payment_method: purchasePaymentMethod,
         items: [
           {
             material_id: activeMaterial.material_id,
@@ -718,9 +719,15 @@ export default function OwnerDashboard() {
                             <td style={styles.td}>LKR {Number(po.total_amount).toLocaleString()}</td>
                             <td style={styles.td}><span style={styles.statusBadge('#f59e0b')}>{po.status}</span></td>
                             <td style={styles.td}>
+                              {po.status === 'Rejected' && po.denial_reason && (
+                                <div style={{ fontSize: '12px', color: '#ef4444', marginBottom: '5px' }}>
+                                  <strong>Reason:</strong> {po.denial_reason}
+                                </div>
+                              )}
                               <button
                                 style={styles.primaryBtn}
                                 onClick={() => handleUpdatePOStatus(po.po_id, 'Delivered')}
+                                disabled={po.status === 'Rejected'}
                               >
                                 Received
                               </button>
@@ -757,7 +764,16 @@ export default function OwnerDashboard() {
                             <td style={styles.td}>{po.items || 'N/A'}</td>
                             <td style={styles.td}>{new Date(po.order_date).toLocaleDateString()}</td>
                             <td style={styles.td}>LKR {Number(po.total_amount).toLocaleString()}</td>
-                            <td style={styles.td}><span style={styles.statusBadge('#10b981')}>{po.status}</span></td>
+                            <td style={styles.td}>
+                              <span style={styles.statusBadge(po.status === 'Rejected' ? '#ef4444' : '#10b981')}>
+                                {po.status}
+                              </span>
+                              {po.status === 'Rejected' && po.denial_reason && (
+                                <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '4px' }}>
+                                  {po.denial_reason}
+                                </div>
+                              )}
+                            </td>
                           </tr>
                         ))
                       )}
@@ -1537,6 +1553,31 @@ export default function OwnerDashboard() {
                   onChange={(e) => setPurchaseQty(e.target.value)}
                   style={{ ...styles.input, color: '#000', backgroundColor: '#fff' }} // Force black text on white bg
                 />
+              </div>
+
+              {/* PAYMENT METHOD SELECTION */}
+              <div style={{ ...styles.inputGroup, marginTop: '20px' }}>
+                <label style={styles.label}>Select Payment Method</label>
+                <div style={{ display: 'flex', gap: '15px', marginTop: '10px' }}>
+                  <div 
+                    onClick={() => setPurchasePaymentMethod('cod')}
+                    style={{
+                      flex: 1, padding: '12px', borderRadius: '8px', border: purchasePaymentMethod === 'cod' ? '2px solid #f59e0b' : '1px solid #e5e7eb',
+                      backgroundColor: purchasePaymentMethod === 'cod' ? '#fef3c7' : 'white', cursor: 'pointer', textAlign: 'center', transition: 'all 0.2s'
+                    }}
+                  >
+                    <div style={{ fontWeight: '600', fontSize: '14px', color: purchasePaymentMethod === 'cod' ? '#92400e' : '#374151' }}>Cash on Delivery</div>
+                  </div>
+                  <div 
+                    onClick={() => setPurchasePaymentMethod('online')}
+                    style={{
+                      flex: 1, padding: '12px', borderRadius: '8px', border: purchasePaymentMethod === 'online' ? '2px solid #f59e0b' : '1px solid #e5e7eb',
+                      backgroundColor: purchasePaymentMethod === 'online' ? '#fef3c7' : 'white', cursor: 'pointer', textAlign: 'center', transition: 'all 0.2s'
+                    }}
+                  >
+                    <div style={{ fontWeight: '600', fontSize: '14px', color: purchasePaymentMethod === 'online' ? '#92400e' : '#374151' }}>Online Payment</div>
+                  </div>
+                </div>
               </div>
 
               <div style={{ marginTop: '25px', padding: '15px', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>

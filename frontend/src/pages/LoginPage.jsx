@@ -7,12 +7,14 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
     
     try {
       const res = await axios.post('http://localhost:5000/api/auth/login', {
@@ -58,6 +60,8 @@ export default function LoginPage() {
     } catch (err) {
       console.error(err);
       setError(err.response?.data?.message || 'Login Failed');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -86,7 +90,9 @@ export default function LoginPage() {
             <Link to="/forgot-password" style={{ color: '#fff', fontSize: '12px', opacity: 0.7, textDecoration: 'none' }}>Forgot Password?</Link>
           </div>
           {error && <p style={{ color: '#ff6b6b', fontSize: '14px', margin: 0 }}>{error}</p>}
-          <button type="submit" style={{ padding: '12px', background: 'linear-gradient(45deg, #00d2ff 0%, #3a7bd5 100%)', border: 'none', borderRadius: '5px', color: 'white', fontWeight: 'bold', marginTop: '10px', cursor: 'pointer' }}>Log In</button>
+          <button type="submit" disabled={loading} style={{ padding: '12px', background: loading ? '#ccc' : 'linear-gradient(45deg, #00d2ff 0%, #3a7bd5 100%)', border: 'none', borderRadius: '5px', color: 'white', fontWeight: 'bold', marginTop: '10px', cursor: loading ? 'not-allowed' : 'pointer' }}>
+            {loading ? 'Logging in...' : 'Log In'}
+          </button>
         </form>
         <p style={{ marginTop: '20px', fontSize: '14px', color: 'rgba(255,255,255,0.7)' }}>
           Don't have an account? <Link to="/register" style={{ color: '#4facfe', textDecoration: 'none' }}>Register here</Link>

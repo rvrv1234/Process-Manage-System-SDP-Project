@@ -25,7 +25,7 @@ export default function CustomerDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-// --- NEW STATE FOR CART FUNCTIONALITY ---
+  // --- NEW STATE FOR CART FUNCTIONALITY ---
   const [cartItems, setCartItems] = useState([]);
   const [showPacketModal, setShowPacketModal] = useState(false);
   const [selectedProductForPackets, setSelectedProductForPackets] = useState(null);
@@ -34,6 +34,7 @@ export default function CustomerDashboard() {
   const [orderQuantity, setOrderQuantity] = useState(1); // Track how many they want to buy from modal
   const [pastOrders, setPastOrders] = useState([]); // Track completed checkouts locally
   const [showProfileModal, setShowProfileModal] = useState(false); // Toggle for user profile visibility
+  const [paymentMethod, setPaymentMethod] = useState('cod'); // 'cod' or 'online'
 
 
   // --- DYNAMIC CATALOG STATE ---
@@ -73,26 +74,26 @@ export default function CustomerDashboard() {
   const handleOpenPacketModal = (product) => {
     const standardWeights = ['50g', '100g', '200g'];
     const packetOptions = standardWeights.map(weight => {
-        const found = (product.packets || []).find(p => p.weight === weight);
-        const stockQty = found ? parseInt(found.quantity) : 0;
-        
-        // Pricing logic: assume base price is for 100g
-        const numericPrice = Number(product.price);
-        const ratio = parseInt(weight) / 100;
-        
-        return {
-            size: weight,
-            price: Math.round(numericPrice * ratio),
-            label: `${weight} Packet`,
-            desc: `Available: ${stockQty}`,
-            quantity: stockQty
-        };
+      const found = (product.packets || []).find(p => p.weight === weight);
+      const stockQty = found ? parseInt(found.quantity) : 0;
+
+      // Pricing logic: assume base price is for 100g
+      const numericPrice = Number(product.price);
+      const ratio = parseInt(weight) / 100;
+
+      return {
+        size: weight,
+        price: Math.round(numericPrice * ratio),
+        label: `${weight} Packet`,
+        desc: stockQty > 0 ? 'In Stock' : 'Out of Stock',
+        quantity: stockQty
+      };
     });
     const legacyProductFormat = {
       id: product.product_id,
       name: product.name,
       category: product.category,
-      rating: 5.0, 
+      rating: 5.0,
       description: product.description,
       price: product.price, // Keep raw price for base calculation
       packets: packetOptions
@@ -158,11 +159,28 @@ export default function CustomerDashboard() {
 
   // 6. Checkout Flow
   const handleCheckout = async () => {
-    if (cartItems.length === 0 || !user?.id) return;
+    console.log("Checking out with payment method:", paymentMethod);
+
+    if (cartItems.length === 0) {
+      alert("Your cart is empty.");
+      return;
+    }
+
+    if (!user?.id) {
+      alert("Please log in to place an order.");
+      return;
+    }
+
+    // Only "Cash on Delivery" is supported for now. "Online Payment" does nothing.
+    if (paymentMethod === 'online') {
+      console.log("Online payment selected - doing nothing as requested.");
+      return;
+    }
 
     const orderData = {
       user_id: user.id,
       total_amount: cartTotal,
+      payment_method: paymentMethod, // Added for future-proofing
       items: cartItems.map(item => ({
         product_id: item.productId,
         quantity: item.quantity,
@@ -171,8 +189,11 @@ export default function CustomerDashboard() {
       }))
     };
 
+    console.log("Sending order data:", orderData);
+
     try {
-      await axios.post('http://localhost:5000/api/orders/create', orderData);
+      const response = await axios.post('http://localhost:5000/api/orders/create', orderData);
+      console.log("Order result:", response.data);
       alert('Order placed securely! Redirecting to Past Orders.');
       setCartItems([]);
       setShowCartModal(false);
@@ -198,7 +219,7 @@ export default function CustomerDashboard() {
       top: 0,
       left: 0,
       right: 0,
-      width: '100%',  
+      width: '100%',
       backgroundColor: '#f3f4f6',
       minHeight: '100vh',
       fontFamily: '"Inter", "Segoe UI", sans-serif',
@@ -532,38 +553,38 @@ export default function CustomerDashboard() {
     packetModalContent: { backgroundColor: 'white', borderRadius: '16px', padding: '30px', width: '500px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' },
     packetOptionCard: (isSelected) => ({ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 20px', border: isSelected ? '2px solid #f59e0b' : '2px solid #e5e7eb', borderRadius: '12px', marginBottom: '15px', cursor: 'pointer', backgroundColor: isSelected ? '#fff7ed' : 'white', transition: 'all 0.2s' }),
     packetIconBox: { width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#f59e0b', display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'white', marginRight: '15px' },
-    cartSidebar: { position: 'fixed', top: 0, right: 0, bottom: 0, width: '450px', backgroundColor: 'white', boxShadow: '-5px 0 15px rgba(0,0,0,0.05)', zIndex: 2001, display: 'flex', flexDirection: 'column', padding: '30px', boxSizing:'border-box' },
+    cartSidebar: { position: 'fixed', top: 0, right: 0, bottom: 0, width: '450px', backgroundColor: 'white', boxShadow: '-5px 0 15px rgba(0,0,0,0.05)', zIndex: 2001, display: 'flex', flexDirection: 'column', padding: '30px', boxSizing: 'border-box' },
     cartHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' },
     cartItemsList: { flex: 1, overflowY: 'auto' },
-    cartItem: { padding: '20px', backgroundColor: '#f9fafb', borderRadius: '12px', marginBottom: '15px', border:'1px solid #e5e7eb' },
+    cartItem: { padding: '20px', backgroundColor: '#f9fafb', borderRadius: '12px', marginBottom: '15px', border: '1px solid #e5e7eb' },
     cartItemHeader: { display: 'flex', justifyContent: 'space-between', marginBottom: '10px' },
     sizeTag: { backgroundColor: '#f59e0b', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: '600', marginRight: '10px' },
     qtySelector: { display: 'flex', alignItems: 'center', backgroundColor: '#e5e7eb', borderRadius: '8px', padding: '5px' },
-    qtyBtn: { border: 'none', background: 'transparent', padding: '5px 10px', cursor: 'pointer', fontSize: '16px', color:'#374151' },
+    qtyBtn: { border: 'none', background: 'transparent', padding: '5px 10px', cursor: 'pointer', fontSize: '16px', color: '#374151' },
     cartFooter: { borderTop: '1px solid #e5e7eb', paddingTop: '20px', marginTop: 'auto' },
     checkoutBtn: { width: '100%', backgroundColor: '#f59e0b', color: 'white', border: 'none', padding: '15px', borderRadius: '12px', fontWeight: '700', fontSize: '16px', cursor: 'pointer' }
   };
 
   return (
     <div style={styles.mainWrapper}>
-        <header style={styles.header}>
-          <div style={styles.logoSection}>
-            <div style={styles.logoBox}>
-              <MdFactory size={24} />
-            </div>
-            <div>
-              <div style={styles.companyName}>Hasal Products</div>
-              <div style={styles.subText}>Manufacturing & Distribution</div>
-            </div>
+      <header style={styles.header}>
+        <div style={styles.logoSection}>
+          <div style={styles.logoBox}>
+            <MdFactory size={24} />
           </div>
+          <div>
+            <div style={styles.companyName}>Hasal Products</div>
+            <div style={styles.subText}>Manufacturing & Distribution</div>
+          </div>
+        </div>
         <div style={styles.navSection}>
-          <button 
+          <button
             style={activeTab === 'dashboard' ? styles.navButtonActive : styles.navButtonInactive}
             onClick={() => setActiveTab('dashboard')}
           >
             <MdDashboard size={20} /> Dashboard
           </button>
-          <button 
+          <button
             style={activeTab === 'orders' ? styles.navButtonActive : styles.navButtonInactive}
             onClick={() => setActiveTab('orders')}
           >
@@ -571,22 +592,22 @@ export default function CustomerDashboard() {
           </button>
         </div>
         <div style={styles.userSection}>
-          <div style={{position:'relative', cursor:'pointer'}} onClick={() => setShowCartModal(true)}>
+          <div style={{ position: 'relative', cursor: 'pointer' }} onClick={() => setShowCartModal(true)}>
             <MdShoppingCart size={24} color="#9ca3af" />
             {cartItems.length > 0 && (
-              <span style={{position:'absolute', top:'-6px', right:'-6px', backgroundColor:'#f59e0b', color:'white', fontSize:'10px', width:'16px', height:'16px', borderRadius:'50%', display:'flex', justifyContent:'center', alignItems:'center', fontWeight:'bold'}}>
+              <span style={{ position: 'absolute', top: '-6px', right: '-6px', backgroundColor: '#f59e0b', color: 'white', fontSize: '10px', width: '16px', height: '16px', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: 'bold' }}>
                 {cartItems.length}
               </span>
             )}
           </div>
-          <button 
+          <button
             onClick={() => setShowProfileModal(true)}
-            style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '12px', 
-              background: 'none', 
-              border: 'none', 
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              background: 'none',
+              border: 'none',
               cursor: 'pointer',
               padding: '5px 10px',
               borderRadius: '8px',
@@ -602,29 +623,29 @@ export default function CustomerDashboard() {
             </div>
             <div style={styles.avatar}>{user?.name?.substring(0, 2).toUpperCase() || 'CU'}</div>
           </button>
-          <MdLogout 
-             size={24} 
-             color="#9ca3af" 
-             style={{cursor:'pointer', marginLeft:'10px'}} 
-             onClick={handleLogout}  
-             title="Logout" 
-            />
+          <MdLogout
+            size={24}
+            color="#9ca3af"
+            style={{ cursor: 'pointer', marginLeft: '10px' }}
+            onClick={handleLogout}
+            title="Logout"
+          />
         </div>
       </header>
 
       <div style={styles.contentContainer}>
-        
+
         <div style={styles.pageHeader}>
           <div>
             <h1 style={styles.pageTitle}>{activeTab === 'dashboard' ? 'Dashboard' : 'My Orders'}</h1>
             <p style={{ color: '#6b7280', fontSize: '16px' }}>{activeTab === 'dashboard' ? `Welcome back, ${user?.name || 'Customer'}` : 'Track and manage your previous orders'}</p>
           </div>
-          <div style={{ 
-            backgroundColor: '#f59e0b', 
-            color: 'white', 
-            padding: '8px 20px', 
-            borderRadius: '8px', 
-            fontWeight: '600' 
+          <div style={{
+            backgroundColor: '#f59e0b',
+            color: 'white',
+            padding: '8px 20px',
+            borderRadius: '8px',
+            fontWeight: '600'
           }}>
             Customer
           </div>
@@ -632,162 +653,162 @@ export default function CustomerDashboard() {
 
         {activeTab === 'dashboard' && (
           <>
-          {/* STATS CARDS */}
-          <div style={styles.statsGrid}>
-            <div style={styles.card}>
-              <div style={styles.cardHeader}>
-                <div style={styles.iconSquare('#f59e0b')}>
-                  <MdShoppingCart />
+            {/* STATS CARDS */}
+            <div style={styles.statsGrid}>
+              <div style={styles.card}>
+                <div style={styles.cardHeader}>
+                  <div style={styles.iconSquare('#f59e0b')}>
+                    <MdShoppingCart />
+                  </div>
+                  <div style={styles.trendText(true)}>
+                    <MdTrendingUp /> +2
+                  </div>
                 </div>
-                <div style={styles.trendText(true)}>
-                  <MdTrendingUp /> +2
+                <div>
+                  <div style={styles.cardValue}>3</div>
+                  <div style={styles.cardLabel}>Total Orders</div>
                 </div>
               </div>
-              <div>
-                <div style={styles.cardValue}>3</div>
-                <div style={styles.cardLabel}>Total Orders</div>
+              <div style={styles.card}>
+                <div style={styles.cardHeader}>
+                  <div style={styles.iconSquare('#f59e0b')}>
+                    <MdLocalShipping />
+                  </div>
+                </div>
+                <div>
+                  <div style={styles.cardValue}>6</div>
+                  <div style={styles.cardLabel}>Pending Deliveries</div>
+                </div>
+              </div>
+              <div style={styles.card}>
+                <div style={styles.cardHeader}>
+                  <div style={styles.iconSquare('#10b981')}>
+                    <MdAttachMoney />
+                  </div>
+                  <div style={styles.trendText(true)}>
+                    <MdTrendingUp /> +18%
+                  </div>
+                </div>
+                <div>
+                  <div style={styles.cardValue}>LKR 2.3M</div>
+                  <div style={styles.cardLabel}>Total Spent</div>
+                </div>
               </div>
             </div>
-            <div style={styles.card}>
-              <div style={styles.cardHeader}>
-                <div style={styles.iconSquare('#f59e0b')}>
-                  <MdLocalShipping />
+
+            <div style={styles.portalContainer}>
+              <div style={styles.portalHeader}>
+                <h2 style={styles.portalTitle}>Product Catalog</h2>
+                <button style={{ ...styles.addToCartButton, width: 'auto', padding: '10px 20px' }} onClick={() => setShowCartModal(true)}>
+                  <MdShoppingCart size={18} /> Cart
+                </button>
+              </div>
+
+              <div style={styles.filterSection}>
+                <div style={styles.searchBarWrapper}>
+                  <MdSearch size={20} color="#9ca3af" />
+                  <input
+                    type="text"
+                    placeholder="Search products..."
+                    style={styles.searchInput}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
                 </div>
+                <select
+                  style={styles.categoryDropdown}
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                >
+                  <option value="all">All Categories</option>
+                  <option value="Powder">Powder</option>
+                  <option value="Whole Spices">Whole Spices</option>
+                  <option value="Seeds">Seeds</option>
+                  <option value="Spice Mix">Spice Mix</option>
+                </select>
               </div>
-              <div>
-                <div style={styles.cardValue}>6</div>
-                <div style={styles.cardLabel}>Pending Deliveries</div>
-              </div>
-            </div>
-            <div style={styles.card}>
-              <div style={styles.cardHeader}>
-                <div style={styles.iconSquare('#10b981')}>
-                  <MdAttachMoney />
-                </div>
-                <div style={styles.trendText(true)}>
-                  <MdTrendingUp /> +18%
-                </div>
-              </div>
-              <div>
-                <div style={styles.cardValue}>LKR 2.3M</div>
-                <div style={styles.cardLabel}>Total Spent</div>
-              </div>
-            </div>
-          </div>
 
-          <div style={styles.portalContainer}>
-               <div style={styles.portalHeader}>
-                 <h2 style={styles.portalTitle}>Product Catalog</h2>
-                 <button style={{...styles.addToCartButton, width: 'auto', padding: '10px 20px'}} onClick={() => setShowCartModal(true)}>
-                   <MdShoppingCart size={18} /> Cart
-                 </button>
-               </div>
+              <div style={styles.productGrid}>
+                {(() => {
+                  const filtered = catalogList.filter(product => {
+                    const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                      product.description.toLowerCase().includes(searchQuery.toLowerCase());
+                    const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory;
+                    return matchesSearch && matchesCategory;
+                  });
 
-               <div style={styles.filterSection}>
-                 <div style={styles.searchBarWrapper}>
-                   <MdSearch size={20} color="#9ca3af" />
-                   <input 
-                     type="text" 
-                     placeholder="Search products..." 
-                     style={styles.searchInput} 
-                     value={searchQuery}
-                     onChange={(e) => setSearchQuery(e.target.value)}
-                   />
-                 </div>
-                 <select 
-                   style={styles.categoryDropdown}
-                   value={selectedCategory}
-                   onChange={(e) => setSelectedCategory(e.target.value)}
-                 >
-                   <option value="all">All Categories</option>
-                   <option value="Powder">Powder</option>
-                   <option value="Whole Spices">Whole Spices</option>
-                   <option value="Seeds">Seeds</option>
-                   <option value="Spice Mix">Spice Mix</option>
-                 </select>
-               </div>
+                  if (filtered.length === 0) {
+                    return <p style={{ gridColumn: '1/-1', textAlign: 'center', color: '#6b7280', padding: '40px' }}>No products matched your search.</p>;
+                  }
 
-               <div style={styles.productGrid}>
-                 {(() => {
-                    const filtered = catalogList.filter(product => {
-                       const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                                            product.description.toLowerCase().includes(searchQuery.toLowerCase());
-                       const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory;
-                       return matchesSearch && matchesCategory;
-                    });
-
-                    if (filtered.length === 0) {
-                      return <p style={{gridColumn:'1/-1', textAlign:'center', color:'#6b7280', padding: '40px'}}>No products matched your search.</p>;
-                    }
-
-                    return filtered.map(product => (
-                      <div key={product.product_id} style={styles.productCard}>
-                        <div style={styles.productHeader}>
-                          <div>
-                            <h3 style={styles.productName}>{product.name}</h3>
-                            <span style={styles.productTag}>{product.category}</span>
-                          </div>
-                          <div style={styles.rating}>
-                            <MdStar /> 5.0
-                          </div>
+                  return filtered.map(product => (
+                    <div key={product.product_id} style={styles.productCard}>
+                      <div style={styles.productHeader}>
+                        <div>
+                          <h3 style={styles.productName}>{product.name}</h3>
+                          <span style={styles.productTag}>{product.category}</span>
                         </div>
-                        <p style={styles.productDescription}>{product.description}</p>
-                        <div style={styles.productFooter}>
-                          <div>
-                            <div style={styles.price}>LKR {Number(product.price).toLocaleString()}</div>
-                            <div style={styles.priceLabel}>per packet</div>
-                          </div>
-                          <div style={styles.minOrder}>Min: 1 packet</div>
+                        <div style={styles.rating}>
+                          <MdStar /> 5.0
                         </div>
-                        <button style={styles.addToCartButton} onClick={() => handleOpenPacketModal(product)}>
-                          <MdShoppingCart /> Select Options
-                        </button>
                       </div>
-                    ));
-                  })()}
-               </div>
-          </div>
+                      <p style={styles.productDescription}>{product.description}</p>
+                      <div style={styles.productFooter}>
+                        <div>
+                          <div style={styles.price}>LKR {Number(product.price).toLocaleString()}</div>
+                          <div style={styles.priceLabel}>per packet</div>
+                        </div>
+                        <div style={styles.minOrder}>Min: 1 packet</div>
+                      </div>
+                      <button style={styles.addToCartButton} onClick={() => handleOpenPacketModal(product)}>
+                        <MdShoppingCart /> Select Options
+                      </button>
+                    </div>
+                  ));
+                })()}
+              </div>
+            </div>
           </>
         )}
 
         {activeTab === 'orders' && (
           <div style={styles.portalContainer}>
-            <h3 style={{fontSize:'20px', fontWeight:'700', marginBottom:'20px', color:'#111827'}}>Past Orders</h3>
+            <h3 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '20px', color: '#111827' }}>Past Orders</h3>
             {pastOrders.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '40px', color: '#9ca3af', backgroundColor: 'white', borderRadius: '12px', border: '1px dashed #d1d5db' }}>
-                  You have not placed any orders yet.
+                You have not placed any orders yet.
               </div>
             ) : (
-              <div style={{display: 'flex', flexDirection: 'column', gap: '20px'}}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 {pastOrders.map((order, idx) => (
-                    <div key={idx} style={{backgroundColor: 'white', borderRadius: '12px', padding: '20px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.05)'}}>
-                      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', paddingBottom: '15px', borderBottom: '1px solid #f3f4f6'}}>
-                        <div>
-                          <div style={{fontWeight: '700', fontSize: '16px', color: '#111827'}}>Order ID: {order.id}</div>
-                          <div style={{fontSize: '13px', color: '#6b7280'}}>Placed on {order.date}</div>
-                        </div>
-                        <div style={{backgroundColor: '#dbeafe', color: '#2563eb', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '600'}}>
-                          {order.status}
-                        </div>
+                  <div key={idx} style={{ backgroundColor: 'white', borderRadius: '12px', padding: '20px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', paddingBottom: '15px', borderBottom: '1px solid #f3f4f6' }}>
+                      <div>
+                        <div style={{ fontWeight: '700', fontSize: '16px', color: '#111827' }}>Order ID: {order.id}</div>
+                        <div style={{ fontSize: '13px', color: '#6b7280' }}>Placed on {order.date}</div>
                       </div>
-                      
-                      <div style={{marginBottom: '15px'}}>
-                        <h4 style={{fontSize: '14px', color: '#374151', marginBottom: '10px'}}>Items:</h4>
-                        <ul style={{listStyle: 'none', padding: 0, margin: 0, fontSize: '14px', color: '#4b5563'}}>
-                          {order.items.map((item, iIndex) => (
-                            <li key={iIndex} style={{display: 'flex', justifyContent: 'space-between', marginBottom: '8px'}}>
-                              <span>{item.quantity}x {item.name} ({item.size})</span>
-                              <span>LKR {(item.price * item.quantity).toLocaleString()}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-
-                      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '15px', borderTop: '1px solid #f3f4f6'}}>
-                        <div style={{fontSize: '14px', color: '#6b7280'}}>Total Amount</div>
-                        <div style={{fontSize: '18px', fontWeight: '700', color: '#111827'}}>LKR {order.total.toLocaleString()}</div>
+                      <div style={{ backgroundColor: '#dbeafe', color: '#2563eb', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }}>
+                        {order.status}
                       </div>
                     </div>
+
+                    <div style={{ marginBottom: '15px' }}>
+                      <h4 style={{ fontSize: '14px', color: '#374151', marginBottom: '10px' }}>Items:</h4>
+                      <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '14px', color: '#4b5563' }}>
+                        {order.items.map((item, iIndex) => (
+                          <li key={iIndex} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                            <span>{item.quantity}x {item.name} ({item.size})</span>
+                            <span>LKR {(item.price * item.quantity).toLocaleString()}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '15px', borderTop: '1px solid #f3f4f6' }}>
+                      <div style={{ fontSize: '14px', color: '#6b7280' }}>Total Amount</div>
+                      <div style={{ fontSize: '18px', fontWeight: '700', color: '#111827' }}>LKR {order.total.toLocaleString()}</div>
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
@@ -800,40 +821,40 @@ export default function CustomerDashboard() {
       {showPacketModal && selectedProductForPackets && (
         <div style={styles.modalOverlay}>
           <div style={styles.packetModalContent}>
-            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px'}}>
-              <div><h3 style={{fontSize:'20px', fontWeight:'700', margin:0}}>Select Packet Size</h3><p style={{color:'#6b7280', fontSize:'14px', margin:'5px 0 0 0'}}>Choose size for {selectedProductForPackets.name}</p></div>
-              <MdClose size={24} style={{cursor:'pointer', color:'#9ca3af'}} onClick={() => setShowPacketModal(false)} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <div><h3 style={{ fontSize: '20px', fontWeight: '700', margin: 0 }}>Select Packet Size</h3><p style={{ color: '#6b7280', fontSize: '14px', margin: '5px 0 0 0' }}>Choose size for {selectedProductForPackets.name}</p></div>
+              <MdClose size={24} style={{ cursor: 'pointer', color: '#9ca3af' }} onClick={() => setShowPacketModal(false)} />
             </div>
-            
+
             <div>
               {selectedProductForPackets.packets.map((option, index) => {
                 const isSelected = selectedPacketOption && selectedPacketOption.size === option.size;
                 const isOutOfStock = option.quantity <= 0;
-                
+
                 return (
-                  <div 
-                    key={index} 
+                  <div
+                    key={index}
                     style={{
                       ...styles.packetOptionCard(isSelected),
                       opacity: isOutOfStock ? 0.6 : 1,
                       cursor: isOutOfStock ? 'not-allowed' : 'pointer'
-                    }} 
+                    }}
                     onClick={() => !isOutOfStock && setSelectedPacketOption(option)}
                   >
-                    <div style={{display:'flex', alignItems:'center'}}>
-                      <div style={{...styles.packetIconBox, backgroundColor: isOutOfStock ? '#9ca3af' : '#f59e0b'}}>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      <div style={{ ...styles.packetIconBox, backgroundColor: isOutOfStock ? '#9ca3af' : '#f59e0b' }}>
                         <MdLocalShipping />
                       </div>
                       <div>
-                        <div style={{fontWeight:'700', color: isOutOfStock ? '#6b7280' : '#1f2937'}}>{option.label}</div>
-                        <div style={{fontSize:'13px', color: isOutOfStock ? '#9ca3af' : '#6b7280', fontWeight: '600'}}>
-                          {isOutOfStock ? 'Out of Stock' : `Available: ${option.quantity}`}
+                        <div style={{ fontWeight: '700', color: isOutOfStock ? '#6b7280' : '#1f2937' }}>{option.label}</div>
+                        <div style={{ fontSize: '13px', color: isOutOfStock ? '#9ca3af' : '#10b981', fontWeight: '600' }}>
+                          {isOutOfStock ? 'Out of Stock' : 'In Stock'}
                         </div>
                       </div>
                     </div>
-                    <div style={{textAlign:'right'}}>
-                      <div style={{fontWeight:'700', fontSize:'18px', color: isOutOfStock ? '#9ca3af' : '#1f2937'}}>LKR {option.price}</div>
-                      <div style={{fontSize:'12px', color: '#6b7280'}}>per packet</div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontWeight: '700', fontSize: '18px', color: isOutOfStock ? '#9ca3af' : '#1f2937' }}>LKR {option.price}</div>
+                      <div style={{ fontSize: '12px', color: '#6b7280' }}>per packet</div>
                     </div>
                   </div>
                 );
@@ -841,20 +862,20 @@ export default function CustomerDashboard() {
             </div>
 
             {selectedPacketOption && (
-              <div style={{marginTop: '20px', padding: '15px', backgroundColor: '#f9fafb', borderRadius: '12px', border: '1px solid #e5e7eb'}}>
-                <label style={{display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '10px'}}>How many packets do you want to buy?</label>
-                <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
-                   <button style={{...styles.qtyBtn, backgroundColor: 'white', border: '1px solid #d1d5db', borderRadius: '8px'}} onClick={() => setOrderQuantity(Math.max(1, orderQuantity - 1))}>−</button>
-                   <input type="number" value={orderQuantity} onChange={(e) => setOrderQuantity(Math.max(1, parseInt(e.target.value) || 1))} style={{width: '60px', textAlign: 'center', border: '1px solid #d1d5db', borderRadius: '8px', padding: '8px', fontSize: '16px'}} />
-                   <button style={{...styles.qtyBtn, backgroundColor: 'white', border: '1px solid #d1d5db', borderRadius: '8px'}} onClick={() => setOrderQuantity(orderQuantity + 1)}>+</button>
-                   <div style={{marginLeft: 'auto', fontWeight: '700', fontSize: '18px'}}>
-                     Total: LKR {(selectedPacketOption.price * orderQuantity).toLocaleString()}
-                   </div>
+              <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#f9fafb', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
+                <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '10px' }}>How many packets do you want to buy?</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                  <button style={{ ...styles.qtyBtn, backgroundColor: 'white', border: '1px solid #d1d5db', borderRadius: '8px' }} onClick={() => setOrderQuantity(Math.max(1, orderQuantity - 1))}>−</button>
+                  <input type="number" value={orderQuantity} onChange={(e) => setOrderQuantity(Math.max(1, parseInt(e.target.value) || 1))} style={{ width: '60px', textAlign: 'center', border: '1px solid #d1d5db', borderRadius: '8px', padding: '8px', fontSize: '16px' }} />
+                  <button style={{ ...styles.qtyBtn, backgroundColor: 'white', border: '1px solid #d1d5db', borderRadius: '8px' }} onClick={() => setOrderQuantity(orderQuantity + 1)}>+</button>
+                  <div style={{ marginLeft: 'auto', fontWeight: '700', fontSize: '18px' }}>
+                    Total: LKR {(selectedPacketOption.price * orderQuantity).toLocaleString()}
+                  </div>
                 </div>
               </div>
             )}
 
-            <button style={{...styles.addToCartButton, marginTop:'20px', opacity: selectedPacketOption ? 1 : 0.5, cursor: selectedPacketOption ? 'pointer' : 'not-allowed'}} disabled={!selectedPacketOption} onClick={handleAddToCart}>
+            <button style={{ ...styles.addToCartButton, marginTop: '20px', opacity: selectedPacketOption ? 1 : 0.5, cursor: selectedPacketOption ? 'pointer' : 'not-allowed' }} disabled={!selectedPacketOption} onClick={handleAddToCart}>
               Confirm & Add to Cart
             </button>
           </div>
@@ -863,73 +884,92 @@ export default function CustomerDashboard() {
 
       {showCartModal && (
         <>
-        <div style={styles.modalOverlay} onClick={() => setShowCartModal(false)}></div>
-        <div style={styles.cartSidebar}>
-          <div style={styles.cartHeader}>
-            <h3 style={{fontSize:'22px', fontWeight:'700', margin:0}}>Shopping Cart</h3>
-            <MdClose size={24} style={{cursor:'pointer', color:'#9ca3af'}} onClick={() => setShowCartModal(false)} />
-          </div>
-          <p style={{color:'#6b7280', marginBottom:'25px'}}>Review your items and place order</p>
-
-          <div style={styles.cartItemsList}>
-            {cartItems.length === 0 ? (
-              <p style={{textAlign:'center', color:'#9ca3af', marginTop:'50px'}}>Your cart is empty.</p>
-            ) : (
-              cartItems.map(item => (
-                <div key={item.cartId} style={styles.cartItem}>
-                  <div style={styles.cartItemHeader}>
-                    <div><h4 style={{fontSize:'16px', fontWeight:'600', margin:0}}>{item.name}</h4><div style={{fontSize:'13px', color:'#6b7280'}}>Powder</div></div>
-                    <MdDelete color="#ef4444" style={{cursor:'pointer'}} onClick={() => handleRemoveItem(item.cartId)} />
-                  </div>
-                  <div style={{display:'flex', alignItems:'center', marginBottom:'15px'}}><span style={styles.sizeTag}>{item.size}</span><span style={{fontSize:'14px', color:'#6b7280'}}>LKR {item.price} / packet</span></div>
-                  <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                    <div style={styles.qtySelector}>
-                      <button style={styles.qtyBtn} onClick={() => handleUpdateQuantity(item.cartId, -1)}>−</button>
-                      <span style={{fontWeight:'600', padding:'0 10px'}}>{item.quantity} packet{item.quantity > 1 ? 's' : ''}</span>
-                      <button style={styles.qtyBtn} onClick={() => handleUpdateQuantity(item.cartId, 1)}>+</button>
-                    </div>
-                    <div style={{fontSize:'18px', fontWeight:'700'}}>LKR {item.price * item.quantity}</div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-
-          <div style={styles.cartFooter}>
-            <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-end', marginBottom:'20px'}}>
-              <div style={{fontSize:'16px', color:'#6b7280'}}>Total</div>
-              <div style={{fontSize:'28px', fontWeight:'700'}}>LKR {cartTotal.toLocaleString()}</div>
+          <div style={styles.modalOverlay} onClick={() => setShowCartModal(false)}></div>
+          <div style={styles.cartSidebar}>
+            <div style={styles.cartHeader}>
+              <h3 style={{ fontSize: '22px', fontWeight: '700', margin: 0 }}>Shopping Cart</h3>
+              <MdClose size={24} style={{ cursor: 'pointer', color: '#9ca3af' }} onClick={() => setShowCartModal(false)} />
             </div>
-            <button style={styles.checkoutBtn} disabled={cartItems.length === 0} onClick={handleCheckout}>Go to checkout</button>
+            <p style={{ color: '#6b7280', marginBottom: '25px' }}>Review your items and place order</p>
+
+            <div style={styles.cartItemsList}>
+              {cartItems.length === 0 ? (
+                <p style={{ textAlign: 'center', color: '#9ca3af', marginTop: '50px' }}>Your cart is empty.</p>
+              ) : (
+                cartItems.map(item => (
+                  <div key={item.cartId} style={styles.cartItem}>
+                    <div style={styles.cartItemHeader}>
+                      <div><h4 style={{ fontSize: '16px', fontWeight: '600', margin: 0 }}>{item.name}</h4><div style={{ fontSize: '13px', color: '#6b7280' }}>Powder</div></div>
+                      <MdDelete color="#ef4444" style={{ cursor: 'pointer' }} onClick={() => handleRemoveItem(item.cartId)} />
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', marginBottom: '15px' }}><span style={styles.sizeTag}>{item.size}</span><span style={{ fontSize: '14px', color: '#6b7280' }}>LKR {item.price} / packet</span></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={styles.qtySelector}>
+                        <button style={styles.qtyBtn} onClick={() => handleUpdateQuantity(item.cartId, -1)}>−</button>
+                        <span style={{ fontWeight: '600', padding: '0 10px' }}>{item.quantity} packet{item.quantity > 1 ? 's' : ''}</span>
+                        <button style={styles.qtyBtn} onClick={() => handleUpdateQuantity(item.cartId, 1)}>+</button>
+                      </div>
+                      <div style={{ fontSize: '18px', fontWeight: '700' }}>LKR {item.price * item.quantity}</div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div style={styles.cartFooter}>
+              {/* Payment Method Selector */}
+              <div style={{ marginBottom: '25px', padding: '15px', backgroundColor: '#f9fafb', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
+                <div style={{ fontSize: '14px', fontWeight: '700', color: '#374151', marginBottom: '15px' }}>Select Payment Method</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '14px', padding: '8px', borderRadius: '8px', backgroundColor: paymentMethod === 'cod' ? '#fff7ed' : 'transparent', border: paymentMethod === 'cod' ? '1px solid #f59e0b' : '1px solid transparent' }}>
+                    <input type="radio" name="paymentMethod" value="cod" checked={paymentMethod === 'cod'} onChange={() => setPaymentMethod('cod')} style={{ accentColor: '#f59e0b' }} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontWeight: paymentMethod === 'cod' ? '600' : '500' }}>Cash on Delivery</span>
+                    </div>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '14px', padding: '8px', borderRadius: '8px', backgroundColor: paymentMethod === 'online' ? '#eff6ff' : 'transparent', border: paymentMethod === 'online' ? '1px solid #3b82f6' : '1px solid transparent' }}>
+                    <input type="radio" name="paymentMethod" value="online" checked={paymentMethod === 'online'} onChange={() => setPaymentMethod('online')} style={{ accentColor: '#3b82f6' }} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontWeight: paymentMethod === 'online' ? '600' : '500' }}>Online Payment (Coming Soon)</span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '20px' }}>
+                <div style={{ fontSize: '16px', color: '#6b7280' }}>Total</div>
+                <div style={{ fontSize: '28px', fontWeight: '700' }}>LKR {cartTotal.toLocaleString()}</div>
+              </div>
+              <button style={styles.checkoutBtn} disabled={cartItems.length === 0} onClick={handleCheckout}>Go to checkout</button>
+            </div>
           </div>
-        </div>
         </>
       )}
 
       {showProfileModal && (
         <div style={styles.modalOverlay} onClick={() => setShowProfileModal(false)}>
-          <div style={{...styles.packetModalContent, width: '400px'}} onClick={e => e.stopPropagation()}>
+          <div style={{ ...styles.packetModalContent, width: '400px' }} onClick={e => e.stopPropagation()}>
             <div style={styles.cartHeader}>
-              <h3 style={{margin: 0}}>User Profile</h3>
-              <button style={{background: 'none', border: 'none', cursor: 'pointer'}} onClick={() => setShowProfileModal(false)}><MdClose size={24} /></button>
+              <h3 style={{ margin: 0 }}>User Profile</h3>
+              <button style={{ background: 'none', border: 'none', cursor: 'pointer' }} onClick={() => setShowProfileModal(false)}><MdClose size={24} /></button>
             </div>
-            <div style={{textAlign: 'center', padding: '20px 0'}}>
-              <div style={{width: '80px', height: '80px', borderRadius: '50%', backgroundColor: '#f59e0b', display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'white', fontSize: '32px', fontWeight: '700', margin: '0 auto 15px'}}>{user?.name?.substring(0, 2).toUpperCase() || 'CU'}</div>
-              <h2 style={{margin: '0 0 5px 0'}}>{user?.name || 'Customer'}</h2>
-              <p style={{margin: 0, color: '#6b7280', fontSize: '14px'}}>kasun@gmail.com</p>
-              <div style={{marginTop: '20px', display: 'inline-block', backgroundColor: '#fef3c7', color: '#92400e', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '600'}}>Valued Customer</div>
+            <div style={{ textAlign: 'center', padding: '20px 0' }}>
+              <div style={{ width: '80px', height: '80px', borderRadius: '50%', backgroundColor: '#f59e0b', display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'white', fontSize: '32px', fontWeight: '700', margin: '0 auto 15px' }}>{user?.name?.substring(0, 2).toUpperCase() || 'CU'}</div>
+              <h2 style={{ margin: '0 0 5px 0' }}>{user?.name || 'Customer'}</h2>
+              <p style={{ margin: 0, color: '#6b7280', fontSize: '14px' }}>kasun@gmail.com</p>
+              <div style={{ marginTop: '20px', display: 'inline-block', backgroundColor: '#fef3c7', color: '#92400e', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }}>Valued Customer</div>
             </div>
-            <div style={{borderTop: '1px solid #e5e7eb', paddingTop: '20px', marginTop: '10px'}}>
-              <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '14px'}}>
-                <span style={{color: '#6b7280'}}>Member Since:</span>
-                <span style={{fontWeight: '600'}}>March 2024</span>
+            <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '20px', marginTop: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '14px' }}>
+                <span style={{ color: '#6b7280' }}>Member Since:</span>
+                <span style={{ fontWeight: '600' }}>March 2024</span>
               </div>
-              <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '14px'}}>
-                <span style={{color: '#6b7280'}}>Status:</span>
-                <span style={{fontWeight: '600', color: '#10b981'}}>Active</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
+                <span style={{ color: '#6b7280' }}>Status:</span>
+                <span style={{ fontWeight: '600', color: '#10b981' }}>Active</span>
               </div>
             </div>
-            <button style={{...styles.checkoutBtn, marginTop: '30px'}} onClick={() => setShowProfileModal(false)}>Close</button>
+            <button style={{ ...styles.checkoutBtn, marginTop: '30px' }} onClick={() => setShowProfileModal(false)}>Close</button>
           </div>
         </div>
       )}

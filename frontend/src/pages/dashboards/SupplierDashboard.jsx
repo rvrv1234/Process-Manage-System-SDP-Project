@@ -14,6 +14,12 @@ export default function SupplierDashboard() {
   const [filter, setFilter] = useState('Total');
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [orders, setOrders] = useState([]);
+  const [materials, setMaterials] = useState([]);
+  const [showAddMaterialModal, setShowAddMaterialModal] = useState(false);
+  const [newMaterial, setNewMaterial] = useState({ name: '', unit_cost: 0 });
+  const [showDenyModal, setShowDenyModal] = useState(false);
+  const [denyReason, setDenyReason] = useState('');
+  const [selectedPO, setSelectedPO] = useState(null);
   const navigate = useNavigate();
 
   const fetchOrders = async () => {
@@ -27,6 +33,13 @@ export default function SupplierDashboard() {
   };
 
   const handleUpdateStatus = async (poId, newStatus) => {
+    if (newStatus === 'Rejected') {
+      setSelectedPO(poId);
+      setDenyReason('');
+      setShowDenyModal(true);
+      return;
+    }
+    
     if (!window.confirm(`Are you sure you want to mark this order as ${newStatus}?`)) return;
     try {
       await axios.put(`http://localhost:5000/api/suppliers/purchase-orders/${poId}/status`, { status: newStatus });
@@ -38,9 +51,90 @@ export default function SupplierDashboard() {
     }
   };
 
+  const confirmDeny = async () => {
+    if (!denyReason.trim()) {
+      alert("Please enter a reason for denial.");
+      return;
+    }
+    try {
+      await axios.put(`http://localhost:5000/api/suppliers/purchase-orders/${selectedPO}/status`, { 
+        status: 'Rejected',
+        reason: denyReason
+      });
+      alert(`Order Rejected successfully.`);
+      setShowDenyModal(false);
+      fetchOrders();
+    } catch (err) {
+      console.error("Error rejecting order:", err);
+      alert("Failed to reject order.");
+    }
+  };
+
+  const fetchMyMaterials = async () => {
+    if (!user?.id) return;
+    try {
+      const res = await axios.get(`http://localhost:5000/api/suppliers/my-materials/${user.id}`);
+      setMaterials(res.data || []);
+    } catch (err) {
+      console.error("Error fetching supplier materials:", err);
+    }
+  };
+
+  const handleAddMaterial = async (e) => {
+    e.preventDefault();
+    try {
+      // 1. Fetch all approved suppliers
+      const supRes = await axios.get('http://localhost:5000/api/suppliers/approved');
+      
+      // 2. Find the supplier record that matches the current logged-in user
+      console.log("DEBUG: Looking for supplier matching:", user);
+      console.log("DEBUG: All approved suppliers:", supRes.data);
+
+      const mySupplierRecord = supRes.data.find(s => 
+        (s.user_id && user?.id && String(s.user_id) === String(user.id)) || 
+        (s.email?.toLowerCase() === user?.email?.toLowerCase())
+      );
+      
+      if (!mySupplierRecord) {
+        console.error("Supplier lookup failed for user:", user);
+        alert(`Action blocked: Could not find an approved supplier record for ${user?.email || 'this account'}. Please contact the owner.`);
+        return;
+      }
+
+      await axios.post('http://localhost:5000/api/suppliers/materials', {
+        ...newMaterial,
+        supplier_id: mySupplierRecord.supplier_id
+      });
+      
+      alert('Material Added Successfully!');
+      setShowAddMaterialModal(false);
+      setNewMaterial({ name: '', unit_cost: 0 });
+      fetchMyMaterials();
+    } catch (err) {
+      console.error("Error adding material:", err);
+      alert("Failed to add material.");
+    }
+  };
+
+  const handleDeleteMaterial = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this material?")) return;
+    try {
+      await axios.delete(`http://localhost:5000/api/suppliers/materials/${id}`);
+      alert("Material deleted.");
+      fetchMyMaterials();
+    } catch (err) {
+      console.error("Error deleting material:", err);
+      alert("Failed to delete material.");
+    }
+  };
+
   useEffect(() => {
     fetchOrders();
-    const interval = setInterval(fetchOrders, 10000); // Poll every 10s
+    fetchMyMaterials();
+    const interval = setInterval(() => {
+      fetchOrders();
+      fetchMyMaterials();
+    }, 10000); // Poll every 10s
     return () => clearInterval(interval);
   }, [user?.id]);
 
@@ -198,6 +292,7 @@ export default function SupplierDashboard() {
         <div style={styles.navSection}>
           <button style={styles.navItem(activeTab === 'dashboard')} onClick={() => setActiveTab('dashboard')}><MdDashboard size={18} /> Dashboard</button>
           <button style={styles.navItem(activeTab === 'orders')} onClick={() => setActiveTab('orders')}><MdShoppingCart size={18} /> Orders</button>
+          <button style={styles.navItem(activeTab === 'materials')} onClick={() => setActiveTab('materials')}><MdFactory size={18} /> Materials</button>
         </div>
         <div style={styles.userSection}>
           <div style={{position:'relative'}}><MdNotifications size={24} color="#9ca3af" /><span style={{position:'absolute', top:'-6px', right:'-6px', backgroundColor:'#ef4444', color:'white', fontSize:'10px', width:'16px', height:'16px', borderRadius:'50%', display:'flex', justifyContent:'center', alignItems:'center'}}>2</span></div>
@@ -300,6 +395,11 @@ export default function SupplierDashboard() {
                       {order.status === 'Shipped' && (
                         <span style={{fontSize:'14px', color:'#6b7280', fontStyle:'italic'}}>Waiting for receipt confirmation...</span>
                       )}
+                      {order.status === 'Rejected' && order.denial_reason && (
+                        <div style={{ fontSize: '13px', color: '#ef4444', fontStyle: 'italic', fontWeight: '600' }}>
+                          Reason: {order.denial_reason}
+                        </div>
+                      )}
                     </div>
                     <div style={styles.price}>LKR {Number(order.total_amount).toLocaleString()}</div>
                   </div>
@@ -380,6 +480,89 @@ export default function SupplierDashboard() {
           </>
         )}
 
+        {/* --- TAB 3: MATERIALS --- */}
+        {activeTab === 'materials' && (
+          <>
+            <div style={styles.pageHeader}>
+              <div><h1 style={styles.pageTitle}>My Materials</h1><p style={styles.pageSubtitle}>Manage your raw material stock and pricing</p></div>
+              <button 
+                style={styles.actionBtn('#f59e0b')}
+                onClick={() => setShowAddMaterialModal(true)}
+              >
+                + Add New Material
+              </button>
+            </div>
+
+            <div style={styles.tableContainer}>
+              <table style={styles.table}>
+                <thead>
+                  <tr>
+                    <th style={styles.th}>Material Name</th>
+                    <th style={styles.th}>Unit Cost (LKR)</th>
+                    <th style={styles.th}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {materials.length === 0 ? (
+                    <tr><td colSpan="4" style={{...styles.td, textAlign:'center'}}>No materials added yet.</td></tr>
+                  ) : materials.map(mat => (
+                    <tr key={mat.material_id}>
+                      <td style={styles.td}>{mat.name}</td>
+                      <td style={styles.td}>{Number(mat.unit_cost).toLocaleString()}</td>
+                      <td style={styles.td}>
+                        <button 
+                          style={{...styles.actionBtn('#ef4444'), padding:'6px 12px', fontSize:'12px'}}
+                          onClick={() => handleDeleteMaterial(mat.material_id)}
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* ADD MATERIAL MODAL */}
+            {showAddMaterialModal && (
+              <div style={styles.modalOverlay} onClick={() => setShowAddMaterialModal(false)}>
+                <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
+                  <div style={styles.modalHeader}>
+                    <h3 style={styles.modalTitle}>Add New Material</h3>
+                    <button style={styles.closeBtn} onClick={() => setShowAddMaterialModal(false)}><MdClose size={24} /></button>
+                  </div>
+                  <form onSubmit={handleAddMaterial} style={{display:'flex', flexDirection:'column', gap:'20px'}}>
+                    <div>
+                      <label style={{display:'block', marginBottom:'8px', fontSize:'14px', fontWeight:'600'}}>Material Name</label>
+                      <input 
+                        type="text" 
+                        required 
+                        style={{width:'100%', padding:'12px', borderRadius:'8px', border:'1px solid #e5e7eb'}}
+                        value={newMaterial.name}
+                        onChange={e => setNewMaterial({...newMaterial, name: e.target.value})}
+                        placeholder="e.g. Organic Pepper"
+                      />
+                    </div>
+                    <div style={{display:'grid', gridTemplateColumns:'1fr', gap:'20px'}}>
+                      <div>
+                        <label style={{display:'block', marginBottom:'8px', fontSize:'14px', fontWeight:'600'}}>Unit Cost (LKR)</label>
+                        <input 
+                          type="number" 
+                          required 
+                          style={{width:'100%', padding:'12px', borderRadius:'8px', border:'1px solid #e5e7eb'}}
+                          value={newMaterial.unit_cost}
+                          onChange={e => setNewMaterial({...newMaterial, unit_cost: e.target.value === '' ? '' : parseFloat(e.target.value)})}
+                        />
+                      </div>
+                    </div>
+                    <button type="submit" style={styles.updateBtn}>Add Material</button>
+                  </form>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
       </div>
 
       {/* FOOTER */}
@@ -402,7 +585,7 @@ export default function SupplierDashboard() {
             <div style={{textAlign: 'center', padding: '20px 0'}}>
               <div style={{width: '80px', height: '80px', borderRadius: '50%', backgroundColor: '#f59e0b', display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'white', fontSize: '32px', fontWeight: '700', margin: '0 auto 15px'}}>{user?.name?.substring(0, 2).toUpperCase() || 'SU'}</div>
               <h2 style={{margin: '0 0 5px 0'}}>{user?.name || 'Supplier User'}</h2>
-              <p style={{margin: 0, color: '#6b7280', fontSize: '14px'}}>ravindusasanak808@gmail.com</p>
+              <p style={{margin: 0, color: '#6b7280', fontSize: '14px'}}>{user?.email || 'ravindusasanka808@gmail.com'}</p>
               <div style={{marginTop: '20px', display: 'inline-block', backgroundColor: '#fef3c7', color: '#92400e', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '600'}}>Verified Supplier</div>
             </div>
             <div style={{borderTop: '1px solid #e5e7eb', paddingTop: '20px', marginTop: '10px'}}>
@@ -416,6 +599,50 @@ export default function SupplierDashboard() {
               </div>
             </div>
             <button style={{...styles.updateBtn, width: '100%', marginTop: '30px'}} onClick={() => setShowProfileModal(false)}>Close</button>
+          </div>
+        </div>
+      )}
+
+      {/* --- DENY REASON MODAL --- */}
+      {showDenyModal && (
+        <div style={styles.modalOverlay} onClick={() => setShowDenyModal(false)}>
+          <div style={{...styles.modalContent, width: '450px'}} onClick={e => e.stopPropagation()}>
+            <div style={styles.modalHeader}>
+              <h3 style={styles.modalTitle}>Reason for Rejection</h3>
+              <button style={styles.closeBtn} onClick={() => setShowDenyModal(false)}><MdClose size={24} /></button>
+            </div>
+            <div style={{padding: '10px 0'}}>
+              <p style={{fontSize: '14px', color: '#6b7280', marginBottom: '15px'}}>Please explain why you are rejecting PO #{selectedPO}:</p>
+              <textarea 
+                style={{
+                  width: '100%', 
+                  height: '120px', 
+                  padding: '12px', 
+                  borderRadius: '8px', 
+                  border: '1px solid #e5e7eb',
+                  resize: 'none',
+                  fontSize: '14px',
+                  fontFamily: 'inherit'
+                }}
+                placeholder="e.g. Out of stock, price mismatch, etc."
+                value={denyReason}
+                onChange={e => setDenyReason(e.target.value)}
+              />
+              <div style={{display: 'flex', gap: '10px', marginTop: '20px'}}>
+                <button 
+                  style={{...styles.updateBtn, flex: 1, backgroundColor: '#6b7280'}} 
+                  onClick={() => setShowDenyModal(false)}
+                >
+                  Cancel
+                </button>
+                <button 
+                  style={{...styles.updateBtn, flex: 1, backgroundColor: '#ef4444'}} 
+                  onClick={confirmDeny}
+                >
+                  Confirm Reject
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

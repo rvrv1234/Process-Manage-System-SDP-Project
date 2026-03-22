@@ -83,7 +83,7 @@ const updateSupplierStatus = async (req, res) => {
 const getApprovedSuppliers = async (req, res) => {
     try {
         const result = await pool.query(
-            `SELECT s.supplier_id, s.name, s.company_name, s.contact_info, s.status, u.email 
+            `SELECT s.supplier_id, s.user_id, s.name, s.company_name, s.contact_info, s.status, u.email 
              FROM suppliers s
              JOIN users u ON s.user_id = u.id
              WHERE s.status IN ('Approved', 'Active')`
