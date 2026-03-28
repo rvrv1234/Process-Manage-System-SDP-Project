@@ -8,4 +8,7 @@ router.get('/', productionController.getBatches);
 // Route to update batch status
 router.put('/:id/status', productionController.updateBatchStatus);
 
+// Routes for Grouped Order Bundling
+router.get('/grouped-orders', productionController.getGroupedOrders);
+
 module.exports = router;

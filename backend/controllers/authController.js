@@ -3,6 +3,8 @@ const pool = require('../config/db');
 const bcrypt = require('bcryptjs'); // For hashing passwords
 const jwt = require('jsonwebtoken'); // For verification links
 const nodemailer = require('nodemailer');
+const { logAudit } = require('../utils/auditLogger');
+
 
 // --- 1. SETUP EMAIL TRANSPORTER (GMAIL) ---
 const transporter = nodemailer.createTransport({
@@ -64,6 +66,10 @@ const registerUser = async (req, res) => {
              await pool.query('INSERT INTO delivery_staff (user_id, address) VALUES ($1, $2)', [userId, address]);
         }
 
+        // Audit Log
+        const reqUserId = req.user?.id || null;
+        await logAudit(userId, 'USER_REGISTER', 'users', userId);
+
         // E. Generate Verification Token & Send Email
         // This will send verification emails to any registering role (Customers, Staff) except Suppliers.
         const emailToken = jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: '1d' });
@@ -119,6 +125,7 @@ const loginUser = async (req, res) => {
         }
 
         // D. Login Success -> Send Token
+        await logAudit(user.id, 'USER_LOGIN', 'users', user.id);
         const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '30d' });
 
         res.json({
@@ -152,6 +159,8 @@ const verifyEmail = async (req, res) => {
         // Update user to verified
         await pool.query('UPDATE users SET is_verified = true WHERE id = $1', [decoded.id]);
         
+        await logAudit(decoded.id, 'EMAIL_VERIFY', 'users', decoded.id);
+
         // Redirect to Frontend Login Page
         const frontend = process.env.FRONTEND_URL || 'http://localhost:5173';
         res.redirect(frontend); 
@@ -226,6 +235,8 @@ const resetPassword = async (req, res) => {
 
         // C. Update Password in DB
         await pool.query('UPDATE users SET password = $1 WHERE id = $2', [hashedPassword, decoded.id]);
+
+        await logAudit(decoded.id, 'PASSWORD_RESET', 'users', decoded.id);
 
         res.json({ message: 'Password has been reset successfully! You can now log in.' });
 

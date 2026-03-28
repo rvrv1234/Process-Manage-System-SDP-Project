@@ -31,9 +31,8 @@ const saveOwnerPayment = async (req, res) => {
         await client.query('COMMIT');
 
         // Audit Logging
-        if (owner_id) {
-            await logAudit(pool, owner_id, 'PURCHASE_PAYMENT_SUCCESS', 'purchase_orders', poId);
-        }
+        const auditUserId = req.user?.id || owner_id || null;
+        await logAudit(auditUserId, 'PROCESS_PAYMENT', 'purchase_orders', poId);
 
         res.status(201).json({ message: "Purchase Order saved successfully", payment_id: poId });
     } catch (err) {

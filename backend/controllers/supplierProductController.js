@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { logAudit } = require('../utils/auditLogger');
 
 // 1. Get all raw materials for the Marketplace
 const getSupplierMaterials = async (req, res) => {
@@ -41,6 +42,10 @@ const placePurchaseOrder = async (req, res) => {
         }
 
         await client.query('COMMIT');
+        
+        const auditUserId = req.user?.id || req.body?.user_id || null;
+        await logAudit(auditUserId, 'PLACE_PURCHASE_ORDER', 'purchase_orders', poId);
+        
         res.status(201).json({ message: "Purchase Order Placed Successfully", po_id: poId });
     } catch (err) {
         await client.query('ROLLBACK');
@@ -55,7 +60,7 @@ const placePurchaseOrder = async (req, res) => {
 const getAllPurchaseOrders = async (req, res) => {
     try {
         const result = await pool.query(`
-            SELECT po.po_id, po.order_date, po.total_amount, po.status, po.denial_reason, s.company_name,
+            SELECT po.po_id, po.supplier_id, po.order_date, po.total_amount, po.status, po.denial_reason, s.company_name,
                    STRING_AGG(rm.name, ', ') as items
             FROM purchase_orders po
             JOIN suppliers s ON po.supplier_id = s.supplier_id
@@ -111,6 +116,14 @@ const updatePurchaseOrderStatus = async (req, res) => {
         );
 
         await client.query('COMMIT');
+        
+        let auditAction = 'UPDATE_PO_STATUS';
+        if (status === 'Confirmed') auditAction = 'CONFIRM_PO';
+        else if (status === 'Shipped') auditAction = 'SHIP_PO';
+
+        const auditUserId = req.user?.id || req.body?.user_id || null;
+        await logAudit(auditUserId, auditAction, 'purchase_orders', id);
+        
         res.json({ message: `Order marked as ${status}`, order: result.rows[0] });
     } catch (err) {
         await client.query('ROLLBACK');
@@ -130,6 +143,10 @@ const addSupplierMaterial = async (req, res) => {
             "INSERT INTO rawmaterials (supplier_id, name, stock_level, unit_cost) VALUES ($1, $2, $3, $4) RETURNING *",
             [supplier_id, name, stock_level, unit_cost]
         );
+        
+        const auditUserId = req.user?.id || req.body?.user_id || null;
+        await logAudit(auditUserId, 'ADD_SUPPLIER_MATERIAL', 'rawmaterials', result.rows[0].material_id);
+        
         res.status(201).json({ message: "Material added successfully", material: result.rows[0] });
     } catch (err) {
         console.error("Error adding material:", err.message);
@@ -160,6 +177,10 @@ const deleteSupplierMaterial = async (req, res) => {
     const { id } = req.params;
     try {
         await pool.query("DELETE FROM rawmaterials WHERE material_id = $1", [id]);
+        
+        const auditUserId = req.user?.id || req.body?.user_id || null;
+        await logAudit(auditUserId, 'DELETE_SUPPLIER_MATERIAL', 'rawmaterials', id);
+        
         res.json({ message: "Material deleted successfully" });
     } catch (err) {
         console.error("Error deleting material:", err.message);
@@ -177,3 +198,108 @@ module.exports = {
     getMyMaterials,
     deleteSupplierMaterial
 };
+
+// 8. Mark PO as Received / Delivered (Owner action)
+const markAsReceived = async (req, res) => {
+    const { id } = req.params; // po_id
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        // 1. Update status
+        const result = await client.query(
+            "UPDATE purchase_orders SET status = 'Delivered' WHERE po_id = $1 RETURNING *",
+            [id]
+        );
+
+        if (result.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ message: "Purchase Order not found" });
+        }
+
+        // 2. Fetch PO Items to sync inventory
+        const itemsRes = await client.query(`
+            SELECT poi.quantity, rm.name, rm.unit_cost 
+            FROM purchase_order_items poi 
+            JOIN rawmaterials rm ON poi.material_id = rm.material_id 
+            WHERE poi.po_id = $1
+        `, [id]);
+
+        // 3. Increment inventory matching by name
+        for (const item of itemsRes.rows) {
+            const invCheck = await client.query("SELECT inventory_id, stock FROM inventory WHERE name = $1", [item.name]);
+            
+            if (invCheck.rows.length > 0) {
+                // Update existing stock
+                await client.query(
+                    "UPDATE inventory SET stock = stock + $1, last_updated = CURRENT_TIMESTAMP WHERE name = $2",
+                    [item.quantity, item.name]
+                );
+            } else {
+                // Insert brand new raw material to inventory
+                await client.query(
+                    "INSERT INTO inventory (name, category, stock, unit, price, status) VALUES ($1, 'Raw Material', $2, 'kg', $3, 'In Stock')",
+                    [item.name, item.quantity, item.unit_cost]
+                );
+            }
+        }
+
+        await client.query('COMMIT');
+
+        // 4. Specific Audit Log for 'ORDER_RECEIVED'
+        const auditUserId = req.user?.id || req.body?.user_id || null;
+        await logAudit(auditUserId, 'ORDER_RECEIVED', 'purchase_orders', id);
+
+        res.json({ message: "Order marked as Delivered and inventory synced successfully", order: result.rows[0] });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error("Error marking PO as received:", err.message);
+        res.status(500).json({ message: "Server Error" });
+    } finally {
+        client.release();
+    }
+};
+
+// 9. Get detailed PO formatting for Supplier Invoice + Audit Log
+const getSupplierInvoice = async (req, res) => {
+    const { id } = req.params; // po_id
+
+    try {
+        // Fetch PO basics + Supplier details
+        const poResult = await pool.query(`
+            SELECT po.po_id, po.order_date, po.total_amount, po.status, s.company_name, s.contact_info, s.name as supplier_contact
+            FROM purchase_orders po
+            JOIN suppliers s ON po.supplier_id = s.supplier_id
+            WHERE po.po_id = $1
+        `, [id]);
+
+        if (poResult.rows.length === 0) {
+            return res.status(404).json({ message: "Purchase Order not found" });
+        }
+
+        const po = poResult.rows[0];
+
+        // Fetch PO Items
+        const itemsResult = await pool.query(`
+            SELECT poi.quantity, poi.unit_price, rm.name
+            FROM purchase_order_items poi
+            JOIN rawmaterials rm ON poi.material_id = rm.material_id
+            WHERE poi.po_id = $1
+        `, [id]);
+
+        po.items = itemsResult.rows;
+
+        // Log audit
+        const auditUserId = req.user?.id || req.body?.user_id || null;
+        await logAudit(auditUserId, 'VIEW_SUPPLIER_INVOICE', 'purchase_orders', id);
+
+        res.json(po);
+    } catch (err) {
+        console.error("Error fetching supplier invoice:", err.message);
+        res.status(500).json({ message: "Server Error" });
+    }
+};
+
+module.exports.markAsReceived = markAsReceived;
+module.exports.getSupplierInvoice = getSupplierInvoice;

@@ -24,6 +24,8 @@ export default function StaffDashboard() {
   });
 
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [inventoryFilter, setInventoryFilter] = useState('All');
+  const [searchTerm, setSearchTerm] = useState('');
   const navigate = useNavigate();
 
   // --- API CALLS ---
@@ -39,7 +41,7 @@ export default function StaffDashboard() {
 
   const fetchBatches = async () => {
     try {
-        const res = await axios.get('http://localhost:5000/api/production');
+        const res = await axios.get('http://localhost:5000/api/production/grouped-orders');
         setBatches(res.data);
     } catch (err) {
         console.error('Failed to fetch production batches:', err);
@@ -62,9 +64,9 @@ export default function StaffDashboard() {
     });
   };
 
-  const handleUpdateBatchStatus = async (batchId, newStatus) => {
+  const handleUpdateBatchStatus = async (orderId, newStatus) => {
     try {
-        await axios.put(`http://localhost:5000/api/production/${batchId}/status`, { status: newStatus });
+        await axios.put(`http://localhost:5000/api/production/${orderId}/status`, { status: newStatus });
         fetchBatches();
     } catch (err) {
         console.error('Failed to update batch status:', err);
@@ -99,6 +101,13 @@ export default function StaffDashboard() {
     localStorage.removeItem('token');
     localStorage.removeItem('userRole');
     navigate('/login');
+  };
+
+  const getStockStatus = (stock) => {
+    const level = parseFloat(stock) || 0;
+    if (level > 10) return { label: 'In Stock', color: '#10b981' };
+    if (level > 0) return { label: 'Low Stock', color: '#eab308' };
+    return { label: 'Out of Stock', color: '#ef4444' };
   };
 
   // --- STYLES ---
@@ -140,7 +149,19 @@ export default function StaffDashboard() {
       boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)', display: 'flex', flexDirection: 'column',
       justifyContent: 'space-between', height: '160px', border: '1px solid #e5e7eb'
     },
-    invStatCard: { backgroundColor: 'white', borderRadius: '12px', padding: '20px', display: 'flex', alignItems: 'center', gap: '15px', border: '1px solid #e5e7eb', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' },
+    invStatCard: (isActive) => ({ 
+      backgroundColor: 'white', 
+      borderRadius: '12px', 
+      padding: '20px', 
+      display: 'flex', 
+      alignItems: 'center', 
+      gap: '15px', 
+      border: isActive ? '2px solid #f59e0b' : '1px solid #e5e7eb', 
+      boxShadow: isActive ? '0 4px 12px rgba(245, 158, 11, 0.15)' : '0 2px 4px rgba(0,0,0,0.05)',
+      cursor: 'pointer',
+      transition: 'all 0.2s',
+      transform: isActive ? 'translateY(-2px)' : 'none'
+    }),
     iconBox: (bg) => ({ width: '50px', height: '50px', borderRadius: '12px', backgroundColor: bg, display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'white', fontSize: '26px' }),
 
     // --- DASHBOARD TAB SPECIFIC ---
@@ -280,10 +301,10 @@ export default function StaffDashboard() {
             </div>
 
             {batches.filter(b => b.status !== 'Completed').map((item, idx) => (
-              <div key={item.batch_id} style={styles.queueItem}>
+              <div key={item.order_id} style={styles.queueItem}>
                 <div>
-                  <h4 style={{margin:'0 0 5px 0', fontSize:'16px', color:'#374151'}}>{item.product_name}</h4>
-                  <div style={{fontSize:'13px', color:'#6b7280'}}>Quantity: {item.quantity}</div>
+                  <h4 style={{margin:'0 0 5px 0', fontSize:'16px', color:'#374151'}}>Order #{item.order_id} - {item.customer_name}</h4>
+                  <div style={{fontSize:'13px', color:'#6b7280'}}>Items: {item.merged_items}</div>
                   <div style={{fontSize:'11px', color:'#9ca3af'}}>Due: {new Date(item.due_date).toLocaleDateString()}</div>
                 </div>
                 <div style={{textAlign:'right'}}>
@@ -304,8 +325,25 @@ export default function StaffDashboard() {
 
             {/* Inventory Stats */}
             <div style={{...styles.statsGrid, gridTemplateColumns: 'repeat(4, 1fr)'}}>
-              {[{label:'Total Products',val:apiProducts.length,col:'#f59e0b'},{label:'In Stock',val:apiProducts.filter(p => p.status === 'In Stock').length,col:'#10b981'},{label:'Low Stock',val:apiProducts.filter(p => p.stock_level < 50).length,col:'#eab308'},{label:'Out of Stock',val:apiProducts.filter(p => p.stock_level === 0).length,col:'#ef4444'}].map((s,i) => (
-                <div key={i} style={styles.invStatCard}><div style={{...styles.iconBox(s.col),marginBottom:0,borderRadius:'10px',width:'45px',height:'45px',fontSize:'22px'}}><MdInventory /></div><div><div style={{fontSize:'12px',color:'#6b7280'}}>{s.label}</div><div style={{fontSize:'20px',fontWeight:'700'}}>{s.val}</div></div></div>
+              {[
+                {label:'Total Products', val:apiProducts.length, col:'#f59e0b', filter: 'All'},
+                {label:'In Stock', val:apiProducts.filter(p => getStockStatus(p.stock_level).label === 'In Stock').length, col:'#10b981', filter: 'In Stock'},
+                {label:'Low Stock', val:apiProducts.filter(p => getStockStatus(p.stock_level).label === 'Low Stock').length, col:'#eab308', filter: 'Low Stock'},
+                {label:'Out of Stock', val:apiProducts.filter(p => getStockStatus(p.stock_level).label === 'Out of Stock').length, col:'#ef4444', filter: 'Out of Stock'}
+              ].map((s,i) => (
+                <div 
+                  key={i} 
+                  style={styles.invStatCard(inventoryFilter === s.filter)}
+                  onClick={() => setInventoryFilter(s.filter)}
+                >
+                  <div style={{...styles.iconBox(s.col),marginBottom:0,borderRadius:'10px',width:'45px',height:'45px',fontSize:'22px'}}>
+                    <MdInventory />
+                  </div>
+                  <div>
+                    <div style={{fontSize:'12px',color:'#6b7280'}}>{s.label}</div>
+                    <div style={{fontSize:'20px',fontWeight:'700'}}>{s.val}</div>
+                  </div>
+                </div>
               ))}
             </div>
 
@@ -314,7 +352,7 @@ export default function StaffDashboard() {
               <div style={styles.tableToolbar}>
                 <div><h3 style={{fontSize:'18px', fontWeight:'600'}}>Products Catalog</h3><p style={{fontSize:'13px', color:'#6b7280'}}>View and manage all spice products</p></div>
                 <div style={{display:'flex', gap:'10px'}}>
-                  <button style={styles.outlineBtn}><MdDownload /> Export CSV</button>
+                  {/* Export CSV button removed */}
                   {/* UPDATED BUTTON */}
                   <button style={styles.primaryBtn} onClick={() => setShowUpdateModal(true)}>
                     <MdEdit /> Update Catalog
@@ -323,59 +361,85 @@ export default function StaffDashboard() {
               </div>
 
               <div style={{display:'flex', justifyContent:'space-between', marginBottom:'20px'}}>
-                <div style={styles.searchBox}><MdSearch color="#9ca3af" size={20} /><input type="text" placeholder="Search products..." style={styles.searchInput} /></div>
+                <div style={styles.searchBox}>
+                  <MdSearch color="#9ca3af" size={20} />
+                  <input 
+                    type="text" 
+                    placeholder="Search products (Name or ID)..." 
+                    style={styles.searchInput} 
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
                 <select style={{padding:'8px', borderRadius:'8px', border:'1px solid #d1d5db'}}><option>All</option></select>
               </div>
 
               <table style={styles.table}>
-                <thead><tr><th style={styles.th}>Product ID</th><th style={styles.th}>Name</th><th style={styles.th}>Packets (Available)</th><th style={styles.th}>Stock (Bulk)</th><th style={styles.th}>Price (Base)</th><th style={styles.th}>Status</th><th style={styles.th}>Actions</th></tr></thead>
+                <thead><tr><th style={styles.th}>Product ID</th><th style={styles.th}>Name</th><th style={styles.th}>Packets (Available)</th><th style={styles.th}>Stock (Bulk)</th><th style={styles.th}>Price (Base)</th><th style={styles.th}>Status</th></tr></thead>
                 <tbody>
-                  {apiProducts.length === 0 ? (
-                    <tr><td colSpan="7" style={{...styles.td, textAlign:'center'}}>No products found in catalog.</td></tr>
-                  ) : (
-                    apiProducts.map(item => (
-                      <tr key={item.product_id}>
-                        <td style={styles.td}>#{item.product_id}</td>
-                        <td style={styles.td}>
-                          <div style={{display:'flex', alignItems:'center', gap:'8px'}}>
-                            <div style={{backgroundColor:'#f59e0b', padding:'6px', borderRadius:'4px', color:'white'}}>
-                              <MdInventory />
-                            </div> 
-                            {item.name}
-                          </div>
-                        </td>
-                        <td style={styles.td}>
-                          <div style={{fontSize:'12px', display:'flex', flexWrap:'wrap', gap:'5px'}}>
-                            {item.packets && item.packets.length > 0 ? (
-                              item.packets.map(p => (
-                                <span key={p.weight} style={{backgroundColor:'#f3f4f6', padding:'2px 6px', borderRadius:'4px'}}>
-                                  {p.weight}: <strong>{p.quantity}</strong>
-                                </span>
-                              ))
-                            ) : (
-                              <span style={{color:'#9ca3af', fontStyle:'italic'}}>No packets added</span>
-                            )}
-                          </div>
-                        </td>
-                        <td style={styles.td}>{item.stock_level} kg</td>
-                        <td style={styles.td}>LKR {Number(item.price).toLocaleString()}</td>
-                        <td style={styles.td}>
-                          <span style={{
-                            backgroundColor: item.stock_level > 0 ? '#10b981' : '#ef4444', 
-                            color:'white', padding:'4px 12px', borderRadius:'20px', fontSize:'11px', fontWeight:'600'
-                          }}>
-                            {item.status}
-                          </span>
-                        </td>
-                        <td style={styles.td}>
-                          <div style={{display:'flex', gap:'10px'}}>
-                            <MdEdit style={{color:'#4b5563', cursor:'pointer'}} title="Edit Product" />
-                            <MdDelete style={{color:'#ef4444', cursor:'pointer'}} title="Delete Product" />
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
+                  {(() => {
+                    const filteredProducts = apiProducts.filter(item => {
+                      // 1. Filter by Stock Status
+                      const statusMatch = inventoryFilter === 'All' || getStockStatus(item.stock_level).label === inventoryFilter;
+                      
+                      // 2. Filter by Search Term (Name or ID)
+                      const searchStr = searchTerm.toLowerCase();
+                      const nameMatch = item.name.toLowerCase().includes(searchStr);
+                      const idMatch = `#${item.product_id}`.includes(searchStr) || String(item.product_id).includes(searchStr);
+                      
+                      return statusMatch && (nameMatch || idMatch);
+                    });
+
+                    if (apiProducts.length === 0) {
+                      return <tr><td colSpan="6" style={{...styles.td, textAlign:'center'}}>No products found in catalog.</td></tr>;
+                    }
+
+                    if (filteredProducts.length === 0) {
+                      return <tr><td colSpan="6" style={{...styles.td, textAlign:'center'}}>No products match your search "{searchTerm}".</td></tr>;
+                    }
+
+                    return filteredProducts.map(item => {
+                      const statusInfo = getStockStatus(item.stock_level);
+                      return (
+                        <tr key={item.product_id}>
+                          <td style={styles.td}>#{item.product_id}</td>
+                          <td style={styles.td}>
+                            <div style={{display:'flex', alignItems:'center', gap:'8px'}}>
+                              <div style={{backgroundColor:'#f59e0b', padding:'6px', borderRadius:'4px', color:'white'}}>
+                                <MdInventory />
+                              </div> 
+                              {item.name}
+                            </div>
+                          </td>
+                          <td style={styles.td}>
+                            <div style={{fontSize:'12px', display:'flex', flexWrap:'wrap', gap:'5px'}}>
+                              {item.packets && item.packets.length > 0 ? (
+                                item.packets.map(p => (
+                                  <span key={p.weight} style={{backgroundColor:'#f3f4f6', padding:'2px 6px', borderRadius:'4px'}}>
+                                    {p.weight}: <strong>{p.quantity}</strong>
+                                  </span>
+                                ))
+                              ) : (
+                                <span style={{color:'#9ca3af', fontStyle:'italic'}}>No packets added</span>
+                              )}
+                            </div>
+                          </td>
+                          <td style={styles.td}>
+                            {parseFloat(item.stock_level || 0).toLocaleString()} kg
+                          </td>
+                          <td style={styles.td}>LKR {Number(item.price).toLocaleString()}</td>
+                          <td style={styles.td}>
+                            <span style={{
+                              backgroundColor: statusInfo.color, 
+                              color:'white', padding:'4px 12px', borderRadius:'20px', fontSize:'11px', fontWeight:'600'
+                            }}>
+                              {statusInfo.label}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    });
+                  })()}
                 </tbody>
               </table>
             </div>
@@ -396,7 +460,7 @@ export default function StaffDashboard() {
                 {l:'Total Batches', v:batches.length, i:<MdFactory />, c:'#f59e0b'},
                 {l:'To Produce', v:batches.filter(b => b.status === 'To Produce').length, i:<MdAccessTime />, c:'#eab308'},
                 {l:'In Process', v:batches.filter(b => b.status === 'In Process').length, i:<MdArrowForward />, c:'#f97316'},
-                {l:'Completed', v:batches.filter(b => b.status === 'Completed').length, i:<MdCheckCircle />, c:'#10b981'}
+                {l:'Completed', v:batches.filter(b => b.status === 'Completed' || b.status === 'Ready for Delivery').length, i:<MdCheckCircle />, c:'#10b981'}
               ].map((s,i) => (
                  <div key={i} style={styles.invStatCard}><div style={{...styles.iconBox(s.c),marginBottom:0,borderRadius:'10px',width:'45px',height:'45px',fontSize:'22px'}}>{s.i}</div><div><div style={{fontSize:'12px',color:'#6b7280'}}>{s.l}</div><div style={{fontSize:'20px',fontWeight:'700'}}>{s.v}</div></div></div>
               ))}
@@ -408,19 +472,19 @@ export default function StaffDashboard() {
               <div style={styles.prodCol('#fefce8')}>
                 <div style={styles.prodColHeader('#a16207')}><div style={{display:'flex',alignItems:'center',gap:'8px'}}><MdAccessTime /> To Produce</div><span style={{backgroundColor:'#a16207',color:'white',padding:'2px 8px',borderRadius:'12px',fontSize:'12px'}}>{batches.filter(b => b.status === 'To Produce').length}</span></div>
                 {batches.filter(b => b.status === 'To Produce').map(batch => (
-                  <div key={batch.batch_id} style={styles.prodCard}>
+                  <div key={batch.order_id} style={styles.prodCard}>
                     <div style={{display:'flex',justifyContent:'space-between',marginBottom:'10px'}}>
                       <h4 style={{margin:0}}>
-                        {batch.product_name} {batch.packet_size && `(${batch.packet_size})`}
+                        Order #{batch.order_id} - {batch.customer_name}
                       </h4>
                       <span style={styles.prodTag('#eab308','white')}>To Produce</span>
                     </div>
-                    <div style={{fontSize:'13px',color:'#6b7280',marginBottom:'15px'}}>
-                      Quantity: {batch.quantity} units {batch.order_id && `(Order #${batch.order_id})`}
+                    <div style={{fontSize:'13px',color:'#6b7280',marginBottom:'15px', lineHeight: '1.4'}}>
+                      {batch.merged_items}
                     </div>
                     <div style={{display:'flex',justifyContent:'space-between',fontSize:'12px',color:'#6b7280',marginBottom:'5px'}}><span>Due Date:</span><span>{new Date(batch.due_date).toLocaleDateString()}</span></div>
                     <div style={{display:'flex',justifyContent:'space-between',fontSize:'12px',color:'#6b7280'}}><span>Assigned To:</span><span>{batch.assigned_team}</span></div>
-                    <button onClick={() => handleUpdateBatchStatus(batch.batch_id, 'In Process')} style={styles.prodBtn('#eab308','white')}><MdArrowForward /> Start Production</button>
+                    <button onClick={() => handleUpdateBatchStatus(batch.order_id, 'In Process')} style={styles.prodBtn('#eab308','white')}><MdArrowForward /> Start Production</button>
                   </div>
                 ))}
               </div>
@@ -429,36 +493,36 @@ export default function StaffDashboard() {
               <div style={styles.prodCol('#fff7ed')}>
                 <div style={styles.prodColHeader('#c2410c')}><div style={{display:'flex',alignItems:'center',gap:'8px'}}><MdArrowForward /> In Process</div><span style={{backgroundColor:'#c2410c',color:'white',padding:'2px 8px',borderRadius:'12px',fontSize:'12px'}}>{batches.filter(b => b.status === 'In Process').length}</span></div>
                 {batches.filter(b => b.status === 'In Process').map(batch => (
-                  <div key={batch.batch_id} style={styles.prodCard}>
+                  <div key={batch.order_id} style={styles.prodCard}>
                     <div style={{display:'flex',justifyContent:'space-between',marginBottom:'10px'}}>
                       <h4 style={{margin:0}}>
-                        {batch.product_name} {batch.packet_size && `(${batch.packet_size})`}
+                        Order #{batch.order_id} - {batch.customer_name}
                       </h4>
                       <span style={styles.prodTag('#f97316','white')}>In Process</span>
                     </div>
-                    <div style={{fontSize:'13px',color:'#6b7280',marginBottom:'15px'}}>
-                      Quantity: {batch.quantity} units {batch.order_id && `(Order #${batch.order_id})`}
+                    <div style={{fontSize:'13px',color:'#6b7280',marginBottom:'15px', lineHeight: '1.4'}}>
+                      {batch.merged_items}
                     </div>
-                    <div style={{display:'flex',justifyContent:'space-between',fontSize:'12px',color:'#6b7280',marginBottom:'5px'}}><span>Start Date:</span><span>{batch.start_date ? new Date(batch.start_date).toLocaleDateString() : 'N/A'}</span></div>
+                    <div style={{display:'flex',justifyContent:'space-between',fontSize:'12px',color:'#6b7280',marginBottom:'5px'}}><span>Start Date:</span><span>{batch.start_date ? new Date(batch.start_date).toLocaleDateString() : 'Today'}</span></div>
                     <div style={{display:'flex',justifyContent:'space-between',fontSize:'12px',color:'#6b7280',marginBottom:'5px'}}><span>Due Date:</span><span>{new Date(batch.due_date).toLocaleDateString()}</span></div>
-                    <button onClick={() => handleUpdateBatchStatus(batch.batch_id, 'Completed')} style={styles.prodBtn('#10b981','white')}><MdCheckCircle /> Mark Complete</button>
+                    <button onClick={() => handleUpdateBatchStatus(batch.order_id, 'Completed')} style={styles.prodBtn('#10b981','white')}><MdCheckCircle /> Mark Complete</button>
                   </div>
                 ))}
               </div>
 
               {/* Column 3: Completed */}
               <div style={styles.prodCol('#f0fdf4')}>
-                <div style={styles.prodColHeader('#15803d')}><div style={{display:'flex',alignItems:'center',gap:'8px'}}><MdCheckCircle /> Completed</div><span style={{backgroundColor:'#15803d',color:'white',padding:'2px 8px',borderRadius:'12px',fontSize:'12px'}}>{batches.filter(b => b.status === 'Completed').length}</span></div>
-                {batches.filter(b => b.status === 'Completed').map(batch => (
-                  <div key={batch.batch_id} style={styles.prodCard}>
+                <div style={styles.prodColHeader('#15803d')}><div style={{display:'flex',alignItems:'center',gap:'8px'}}><MdCheckCircle /> Completed</div><span style={{backgroundColor:'#15803d',color:'white',padding:'2px 8px',borderRadius:'12px',fontSize:'12px'}}>{batches.filter(b => b.status === 'Completed' || b.status === 'Ready for Delivery').length}</span></div>
+                {batches.filter(b => b.status === 'Completed' || b.status === 'Ready for Delivery').map(batch => (
+                  <div key={batch.order_id} style={styles.prodCard}>
                     <div style={{display:'flex',justifyContent:'space-between',marginBottom:'10px'}}>
                       <h4 style={{margin:0}}>
-                        {batch.product_name} {batch.packet_size && `(${batch.packet_size})`}
+                        Order #{batch.order_id} - {batch.customer_name}
                       </h4>
                       <span style={styles.prodTag('#10b981','white')}>Completed</span>
                     </div>
-                    <div style={{fontSize:'13px',color:'#6b7280',marginBottom:'15px'}}>
-                      Quantity: {batch.quantity} units {batch.order_id && `(Order #${batch.order_id})`}
+                    <div style={{fontSize:'13px',color:'#6b7280',marginBottom:'15px', lineHeight: '1.4'}}>
+                      {batch.merged_items}
                     </div>
                     <div style={{display:'flex',justifyContent:'space-between',fontSize:'12px',color:'#6b7280',marginBottom:'5px'}}><span>Completed:</span><span>{batch.completed_date ? new Date(batch.completed_date).toLocaleDateString() : 'Recently'}</span></div>
                     <button style={{...styles.prodBtn('#10b981','white'), opacity:0.8, cursor:'default'}}>Completed ✓</button>

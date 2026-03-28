@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 require('dotenv').config();
 const pool = require('./config/db');
 const supplierRoutes = require('./routes/supplierRoutes');
@@ -8,6 +9,7 @@ const productRoutes = require('./routes/productRoutes');
 const inventoryRoutes = require('./routes/inventoryRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const ownerPaymentRoutes = require('./routes/ownerPaymentRoutes');
+const returnRoutes = require('./routes/returnRoutes');
 
 
 // --- 1. IMPORT CONTROLLERS ---
@@ -21,9 +23,12 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
+// Serve static files from the public/uploads directory
+app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
+
 const orderRoutes = require('./routes/orderRoutes');
 const reportRoutes = require('./routes/reportRoutes');
-
+const deliveryRoutes = require('./routes/deliveryRoutes');
 
 // --- 2. DEFINE ROUTES ---
 
@@ -44,7 +49,8 @@ app.use('/api/production', productionRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/owner-payments', ownerPaymentRoutes);
-
+app.use('/api/delivery', deliveryRoutes);
+app.use('/api/returns', returnRoutes);
 
 // --- ADMIN ROUTES (Supplier Requests) ---
 app.get('/api/admin/requests', getPendingSuppliers); // Fetch list

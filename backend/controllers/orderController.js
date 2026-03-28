@@ -68,9 +68,8 @@ const createCustomerOrder = async (req, res) => {
         await client.query('COMMIT');
         
         // Audit Logging
-        if (user_id) {
-            await logAudit(pool, user_id, 'CUSTOMER_ORDER_CREATED', 'orders', orderId);
-        }
+        const auditUserId = req.user?.id || user_id || null;
+        await logAudit(auditUserId, 'CREATE_ORDER', 'orders', orderId);
 
         res.status(201).json({ message: "Order Placed Successfully", order_id: orderId });
     } catch (err) {
@@ -105,7 +104,7 @@ const getCustomerOrders = async (req, res) => {
     const { userId } = req.params;
     try {
         const result = await pool.query(`
-            SELECT o.order_id as id, o.order_date as date, o.total_amount as total, o.status,
+            SELECT o.order_id as id, o.order_date as date, o.total_amount as total, o.status, o.customer_id,
                    json_agg(json_build_object('name', p.name, 'quantity', oi.quantity, 'price', oi.unit_price, 'size', oi.packet_size)) as items
             FROM orders o
             JOIN customers c ON o.customer_id = c.customer_id
@@ -134,6 +133,10 @@ const updateCustomerOrderStatus = async (req, res) => {
         if (result.rows.length === 0) {
             return res.status(404).json({ message: "Order not found" });
         }
+        
+        const auditUserId = req.user?.id || req.body?.user_id || null;
+        await logAudit(auditUserId, 'UPDATE_ORDER_STATUS', 'orders', id);
+        
         res.json({ message: "Order status updated", order: result.rows[0] });
     } catch (err) {
         console.error("Error updating customer order status:", err.message);
@@ -141,4 +144,118 @@ const updateCustomerOrderStatus = async (req, res) => {
     }
 };
 
-module.exports = { createCustomerOrder, getAllCustomerOrders, getCustomerOrders, updateCustomerOrderStatus };
+// 5. Request a Customer Return
+const requestCustomerOrderReturn = async (req, res) => {
+    let { order_id, customer_id, reason, user_id } = req.body;
+    const image_url = req.file ? `/uploads/returns/${req.file.filename}` : null;
+
+    try {
+        // Fallback: If customer_id not provided, find it from user_id
+        if (!customer_id && user_id) {
+            const customerResult = await pool.query("SELECT customer_id FROM customers WHERE user_id = $1", [user_id]);
+            if (customerResult.rows.length > 0) {
+                customer_id = customerResult.rows[0].customer_id;
+            }
+        }
+
+        if (!customer_id) {
+            return res.status(400).json({ message: "Customer ID is required" });
+        }
+
+        console.log('Final Payload for DB (Customer Return):', { order_id, customer_id, reason, image_url });
+
+        const result = await pool.query(
+            "INSERT INTO customer_return_requests (order_id, customer_id, reason, image_url, status) VALUES ($1, $2, $3, $4, 'Pending') RETURNING *",
+            [order_id, customer_id, reason, image_url]
+        );
+
+        const auditUserId = req.user?.id || customer_id || null;
+        await logAudit(auditUserId, 'REQUEST_CUSTOMER_RETURN', 'customer_return_requests', result.rows[0].return_id);
+
+        res.status(201).json({ message: "Return request submitted successfully", returnRequest: result.rows[0] });
+    } catch (err) {
+        console.error("CRITICAL ERROR: Failed to submit customer return request.");
+        console.error("DB Message:", err.message);
+        console.error("DB Code:", err.code);
+        res.status(500).json({ message: "Server Error: " + err.message });
+    }
+};
+
+// 6. Get All Customer Returns (for Owner)
+const getAllCustomerReturns = async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT cr.*, o.order_date, u.name as customer_name
+            FROM customer_return_requests cr
+            JOIN orders o ON cr.order_id = o.order_id
+            JOIN customers c ON cr.customer_id = c.customer_id
+            JOIN users u ON c.user_id = u.id
+            ORDER BY cr.request_date DESC
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        console.error("Error fetching customer returns:", err.message);
+        res.status(500).json({ message: "Server Error" });
+    }
+};
+
+// 7. Update Customer Return Status
+const updateCustomerReturnStatus = async (req, res) => {
+    const { id } = req.params; // return_id
+    let { status } = req.body; // 'APPROVED' or 'REJECTED'
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        // Normalize status to uppercase for DB consistency
+        const upperStatus = status?.toUpperCase();
+
+        // Update return request status
+        const returnRes = await client.query(
+            "UPDATE customer_return_requests SET status = $1 WHERE return_id = $2 RETURNING *",
+            [upperStatus, id]
+        );
+
+        if (returnRes.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ message: "Return request not found" });
+        }
+
+        const order_id = returnRes.rows[0].order_id;
+
+        // If Approved, update the original order status to 'RETURNED'
+        if (upperStatus === 'APPROVED' || upperStatus === 'ACCEPTED') {
+            await client.query(
+                "UPDATE orders SET status = 'RETURNED' WHERE order_id = $1",
+                [order_id]
+            );
+        }
+
+        await client.query('COMMIT');
+
+        const auditUserId = req.user?.id || req.body?.user_id || null;
+        await logAudit(auditUserId, 'UPDATE_CUSTOMER_RETURN_STATUS', 'customer_return_requests', id);
+
+        res.json({ message: `Return request ${upperStatus} successfully`, returnRequest: returnRes.rows[0] });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error("DATABASE FAILURE: Update status at updateCustomerReturnStatus failed.");
+        console.error("Error Message:", err.message);
+        console.error("Constraint Violated:", err.constraint);
+        console.warn("Hint: Ensure the status matches the CHECK constraint in the database.");
+        res.status(500).json({ message: "Server Error: " + err.message });
+    } finally {
+        client.release();
+    }
+};
+
+module.exports = { 
+    createCustomerOrder, 
+    getAllCustomerOrders, 
+    getCustomerOrders, 
+    updateCustomerOrderStatus,
+    requestCustomerOrderReturn,
+    getAllCustomerReturns,
+    updateCustomerReturnStatus
+};

@@ -20,6 +20,7 @@ export default function SupplierDashboard() {
   const [showDenyModal, setShowDenyModal] = useState(false);
   const [denyReason, setDenyReason] = useState('');
   const [selectedPO, setSelectedPO] = useState(null);
+  const [returnRequests, setReturnRequests] = useState([]);
   const navigate = useNavigate();
 
   const fetchOrders = async () => {
@@ -80,6 +81,37 @@ export default function SupplierDashboard() {
     }
   };
 
+  const fetchReturnRequests = async () => {
+    if (!user?.id) return;
+    try {
+      // 1. Fetch approved supplier record for current user
+      const supRes = await axios.get('http://localhost:5000/api/suppliers/approved');
+      const mySupplierRecord = supRes.data.find(s => 
+        (s.user_id && user?.id && String(s.user_id) === String(user.id)) || 
+        (s.email?.toLowerCase() === user?.email?.toLowerCase())
+      );
+
+      if (mySupplierRecord) {
+        const res = await axios.get(`http://localhost:5000/api/returns/supplier/${mySupplierRecord.supplier_id}`);
+        setReturnRequests(res.data || []);
+      }
+    } catch (err) {
+      console.error("Error fetching return requests:", err);
+    }
+  };
+
+  const handleUpdateReturnStatus = async (returnId, newStatus) => {
+    if (!window.confirm(`Are you sure you want to ${newStatus} this return request?`)) return;
+    try {
+      await axios.put(`http://localhost:5000/api/returns/${returnId}/status`, { status: newStatus });
+      alert(`Return request ${newStatus} successfully!`);
+      fetchReturnRequests();
+    } catch (err) {
+      console.error("Error updating return status:", err);
+      alert("Failed to update return status.");
+    }
+  };
+
   const handleAddMaterial = async (e) => {
     e.preventDefault();
     try {
@@ -131,9 +163,11 @@ export default function SupplierDashboard() {
   useEffect(() => {
     fetchOrders();
     fetchMyMaterials();
+    fetchReturnRequests();
     const interval = setInterval(() => {
       fetchOrders();
       fetchMyMaterials();
+      fetchReturnRequests();
     }, 10000); // Poll every 10s
     return () => clearInterval(interval);
   }, [user?.id]);
@@ -293,6 +327,7 @@ export default function SupplierDashboard() {
           <button style={styles.navItem(activeTab === 'dashboard')} onClick={() => setActiveTab('dashboard')}><MdDashboard size={18} /> Dashboard</button>
           <button style={styles.navItem(activeTab === 'orders')} onClick={() => setActiveTab('orders')}><MdShoppingCart size={18} /> Orders</button>
           <button style={styles.navItem(activeTab === 'materials')} onClick={() => setActiveTab('materials')}><MdFactory size={18} /> Materials</button>
+          <button style={styles.navItem(activeTab === 'returns')} onClick={() => setActiveTab('returns')}><MdLocalShipping size={18} /> Return Requests</button>
         </div>
         <div style={styles.userSection}>
           <div style={{position:'relative'}}><MdNotifications size={24} color="#9ca3af" /><span style={{position:'absolute', top:'-6px', right:'-6px', backgroundColor:'#ef4444', color:'white', fontSize:'10px', width:'16px', height:'16px', borderRadius:'50%', display:'flex', justifyContent:'center', alignItems:'center'}}>2</span></div>
@@ -385,12 +420,12 @@ export default function SupplierDashboard() {
                     <div style={styles.btnGroup}>
                       {order.status === 'Pending' && (
                         <>
-                          <button style={styles.actionBtn('#10b981')} onClick={() => handleUpdateStatus(order.po_id, 'Confirmed')}>Confirm Order</button>
+                          <button style={styles.actionBtn('#3b82f6')} onClick={() => handleUpdateStatus(order.po_id, 'Confirmed')}>Confirm Order</button>
                           <button style={styles.actionBtn('#ef4444')} onClick={() => handleUpdateStatus(order.po_id, 'Rejected')}>Reject</button>
                         </>
                       )}
                       {order.status === 'Confirmed' && (
-                        <button style={styles.actionBtn('#3b82f6')} onClick={() => handleUpdateStatus(order.po_id, 'Shipped')}>Mark as Shipped</button>
+                        <button style={styles.actionBtn('#8b5cf6')} onClick={() => handleUpdateStatus(order.po_id, 'Shipped')}>Mark as Shipped</button>
                       )}
                       {order.status === 'Shipped' && (
                         <span style={{fontSize:'14px', color:'#6b7280', fontStyle:'italic'}}>Waiting for receipt confirmation...</span>
@@ -560,6 +595,75 @@ export default function SupplierDashboard() {
                 </div>
               </div>
             )}
+          </>
+        )}
+
+        {/* --- TAB 4: RETURN REQUESTS --- */}
+        {activeTab === 'returns' && (
+          <>
+            <div style={styles.pageHeader}>
+              <div><h1 style={styles.pageTitle}>Return Requests</h1><p style={styles.pageSubtitle}>Review and manage product return requests from the owner</p></div>
+            </div>
+
+            <div style={styles.tableContainer}>
+              <h3 style={{fontSize:'18px', fontWeight:'600', marginBottom:'20px'}}>Return Request List</h3>
+              <table style={styles.table}>
+                <thead>
+                  <tr>
+                    <th style={styles.th}>Return ID</th>
+                    <th style={styles.th}>Order ID</th>
+                    <th style={styles.th}>Reason</th>
+                    <th style={styles.th}>Request Date</th>
+                    <th style={styles.th}>Status</th>
+                    <th style={styles.th}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {returnRequests.length === 0 ? (
+                    <tr><td colSpan="6" style={{...styles.td, textAlign:'center'}}>No return requests found.</td></tr>
+                  ) : returnRequests.map(req => (
+                    <tr key={req.return_id}>
+                      <td style={styles.td}>RET-{req.return_id}</td>
+                      <td style={styles.td}>PO-{req.po_id}</td>
+                      <td style={styles.td}>
+                        <div style={{maxWidth:'300px', fontSize:'13px', color:'#4b5563'}}>
+                          {req.reason}
+                        </div>
+                      </td>
+                      <td style={styles.td}>{new Date(req.request_date).toLocaleDateString()}</td>
+                      <td style={styles.td}>
+                        <span style={styles.statusTag(req.status)}>
+                          {req.status}
+                        </span>
+                      </td>
+                      <td style={styles.td}>
+                        {req.status === 'Pending' && (
+                          <div style={{display:'flex', gap:'10px'}}>
+                            <button 
+                              style={{...styles.actionBtn('#10b981'), padding:'6px 14px', fontSize:'12px', whiteSpace:'nowrap'}}
+                              onClick={() => handleUpdateReturnStatus(req.return_id, 'Approved')}
+                            >
+                              Approve
+                            </button>
+                            <button 
+                              style={{...styles.actionBtn('#ef4444'), padding:'6px 14px', fontSize:'12px', whiteSpace:'nowrap'}}
+                              onClick={() => handleUpdateReturnStatus(req.return_id, 'Rejected')}
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        )}
+                        {req.status !== 'Pending' && (
+                          <span style={{fontSize:'12px', color:'#9ca3af', fontStyle:'italic'}}>
+                            No actions available
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </>
         )}
 

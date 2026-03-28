@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getPendingSuppliers, updateSupplierStatus, getApprovedSuppliers } = require('../controllers/supplierController');
+const { getPendingSuppliers, updateSupplierStatus, getApprovedSuppliers, updatePOStatus } = require('../controllers/supplierController');
 const { 
     getSupplierMaterials, 
     placePurchaseOrder, 
@@ -9,13 +9,17 @@ const {
     getSupplierPurchaseOrders,
     addSupplierMaterial,
     getMyMaterials,
-    deleteSupplierMaterial
+    deleteSupplierMaterial,
+    markAsReceived,
+    getSupplierInvoice
 } = require('../controllers/supplierProductController');
 
 // PO Management Endpoints
 router.get('/all-purchase-orders', getAllPurchaseOrders);
 router.get('/my-purchase-orders/:userId', getSupplierPurchaseOrders);
 router.put('/purchase-orders/:id/status', updatePurchaseOrderStatus);
+router.patch('/purchase-orders/:id/receive', markAsReceived);
+router.get('/purchase-orders/:id/receipt', getSupplierInvoice);
 
 // GET http://localhost:5000/api/suppliers/pending
 router.get('/pending', getPendingSuppliers);
@@ -25,6 +29,9 @@ router.put('/:id/status', updateSupplierStatus);
 
 // GET http://localhost:5000/api/suppliers/approved
 router.get('/approved', getApprovedSuppliers);
+
+// PATCH Request for Suppliers to Update PO Status
+router.patch('/update-status/:id', updatePOStatus);
 
 // New Marketplace Endpoints
 router.get('/materials', getSupplierMaterials);

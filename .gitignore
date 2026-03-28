@@ -72,3 +72,5 @@ backend/*migrate*.js
 backend/*test*.js
 backend/*verify*.js
 backend/*trigger*.js
+
+backend/public/uploads/

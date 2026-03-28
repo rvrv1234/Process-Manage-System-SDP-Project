@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const bcrypt = require('bcryptjs');
+const { logAudit } = require('../utils/auditLogger');
 
 // --- A. STAFF MANAGEMENT FUNCTIONS ---
 
@@ -57,6 +58,10 @@ const addStaff = async (req, res) => {
         );
 
         await pool.query('COMMIT');
+        
+        const auditUserId = req.user?.id || req.body?.user_id || null;
+        await logAudit(auditUserId, 'ADD_STAFF', 'staff', result.rows[0].staff_id);
+        
         res.json(result.rows[0]);
     } catch (err) {
         await pool.query('ROLLBACK');
@@ -85,6 +90,10 @@ const deleteStaff = async (req, res) => {
         }
 
         await pool.query('COMMIT');
+        
+        const auditUserId = req.user?.id || req.body?.user_id || null;
+        await logAudit(auditUserId, 'DELETE_STAFF', 'staff', id);
+        
         res.json({ message: "Staff removed successfully" });
     } catch (err) {
         await pool.query('ROLLBACK');
@@ -120,6 +129,10 @@ const updateCatalog = async (req, res) => {
         }
 
         await pool.query('COMMIT'); // Save Changes
+        
+        const auditUserId = req.user?.id || req.body?.user_id || null;
+        await logAudit(auditUserId, 'UPDATE_CATALOG_PACKETS', 'product_packets', productId);
+        
         res.json({ message: 'Catalog updated successfully!' });
 
     } catch (error) {

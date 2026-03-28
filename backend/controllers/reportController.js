@@ -83,9 +83,26 @@ const getInventoryDistribution = async (req, res) => {
     }
 };
 
+// 5. Get System Audit Report
+const getAuditReport = async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT a.audit_id, COALESCE(u.name, 'Guest / System') AS user_name, a.action_type, a.entity_name, a.timestamp 
+            FROM auditrecords a 
+            LEFT JOIN users u ON a.user_id = u.id 
+            ORDER BY a.timestamp DESC
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        console.error("Error fetching system audit report:", err.message);
+        res.status(500).json({ message: "Server Error" });
+    }
+};
+
 module.exports = { 
     getFinancialSummary, 
     getSalesByProduct, 
     getOrderTrends, 
-    getInventoryDistribution 
+    getInventoryDistribution,
+    getAuditReport
 };

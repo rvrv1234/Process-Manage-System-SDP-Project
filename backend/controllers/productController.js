@@ -1,10 +1,17 @@
 const pool = require('../config/db');
+const { logAudit } = require('../utils/auditLogger');
 
 // 1. Get all products
 const getCatalog = async (req, res) => {
     try {
         const result = await pool.query(`
-            SELECT p.*, 
+            SELECT p.product_id, p.name, p.category, p.description, p.price, p.stock_level, 
+            CASE 
+                WHEN p.stock_level > 10 THEN 'In Stock'
+                WHEN p.stock_level > 0 AND p.stock_level <= 10 THEN 'Low Stock'
+                ELSE 'Out of Stock'
+            END as status,
+            p.raw_material_id, p.raw_material_quantity,
             COALESCE(
                 json_agg(
                     json_build_object('weight', pp.weight, 'quantity', pp.quantity)
@@ -33,7 +40,7 @@ const addProduct = async (req, res) => {
         
         // Step 1: Insert into products table
         const productResult = await client.query(
-            "INSERT INTO products (name, category, description, price, stock_level, status, raw_material_id, raw_material_quantity) VALUES ($1, $2, $3, $4, $5, 'In Stock', $6, $7) RETURNING *",
+            "INSERT INTO products (name, category, description, price, stock_level, status, raw_material_id, raw_material_quantity) VALUES ($1, $2, $3, $4, $5, CASE WHEN $5::numeric > 10 THEN 'In Stock' WHEN $5::numeric > 0 THEN 'Low Stock' ELSE 'Out of Stock' END, $6, $7) RETURNING *",
             [name, category, description, price, stock_level, raw_material_id, raw_material_quantity]
         );
         const productId = productResult.rows[0].product_id;
@@ -57,6 +64,10 @@ const addProduct = async (req, res) => {
         }
 
         await client.query('COMMIT');
+        
+        const auditUserId = req.user?.id || req.body?.user_id || null;
+        await logAudit(auditUserId, 'ADD_PRODUCT', 'products', productId);
+        
         res.status(201).json(productResult.rows[0]);
     } catch (err) {
         await client.query('ROLLBACK');
@@ -101,7 +112,7 @@ const updateProduct = async (req, res) => {
 
         // Step 3: Update the actual product
         const result = await client.query(
-            "UPDATE products SET name = $1, category = $2, description = $3, price = $4, stock_level = $5 WHERE product_id = $6 RETURNING *",
+            "UPDATE products SET name = $1, category = $2, description = $3, price = $4, stock_level = $5, status = CASE WHEN $5::numeric > 10 THEN 'In Stock' WHEN $5::numeric > 0 THEN 'Low Stock' ELSE 'Out of Stock' END WHERE product_id = $6 RETURNING *",
             [name, category, description, price, stock_level, id]
         );
 
@@ -125,6 +136,10 @@ const updateProduct = async (req, res) => {
         }
         
         await client.query('COMMIT');
+        
+        const auditUserId = req.user?.id || req.body?.user_id || null;
+        await logAudit(auditUserId, 'UPDATE_PRODUCT', 'products', id);
+        
         res.json(result.rows[0]);
     } catch (err) {
         await client.query('ROLLBACK');
@@ -143,6 +158,10 @@ const deleteProduct = async (req, res) => {
         if (result.rows.length === 0) {
             return res.status(404).json({ message: "Product not found" });
         }
+        
+        const auditUserId = req.user?.id || req.body?.user_id || null;
+        await logAudit(auditUserId, 'DELETE_PRODUCT', 'products', id);
+        
         res.json({ message: "Product deleted successfully" });
     } catch (err) {
         console.error("Error deleting product:", err.message);

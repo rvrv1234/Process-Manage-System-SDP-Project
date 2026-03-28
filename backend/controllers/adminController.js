@@ -1,6 +1,7 @@
 const pool = require('../config/db');
 const nodemailer = require('nodemailer');
 const jwt = require('jsonwebtoken');
+const { logAudit } = require('../utils/auditLogger');
 
 // --- SETUP EMAIL (Same as Auth Controller) ---
 const transporter = nodemailer.createTransport({
@@ -66,6 +67,9 @@ const approveSupplier = async (req, res) => {
             `
         });
 
+        const auditUserId = req.user?.id || req.body?.user_id || null;
+        await logAudit(auditUserId, 'APPROVE_SUPPLIER', 'suppliers', id);
+
         res.json({ message: 'Supplier Approved and Email Sent!' });
 
     } catch (error) {
@@ -80,6 +84,10 @@ const rejectSupplier = async (req, res) => {
     try {
         // Just set status to Rejected (No email sent)
         await pool.query("UPDATE suppliers SET status = 'Rejected' WHERE supplier_id = $1", [id]);
+        
+        const auditUserId = req.user?.id || req.body?.user_id || null;
+        await logAudit(auditUserId, 'REJECT_SUPPLIER', 'suppliers', id);
+        
         res.json({ message: 'Supplier Rejected' });
     } catch (error) {
         console.error(error);

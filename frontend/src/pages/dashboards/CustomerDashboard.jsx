@@ -37,6 +37,13 @@ export default function CustomerDashboard() {
   const [showProfileModal, setShowProfileModal] = useState(false); // Toggle for user profile visibility
   const [paymentMethod, setPaymentMethod] = useState('cod'); // 'cod' or 'online'
   const [showPaymentModal, setShowPaymentModal] = useState(false); // Stripe modal
+  
+  // --- RETURN REQUEST STATE ---
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [selectedOrderForReturn, setSelectedOrderForReturn] = useState(null);
+  const [returnReason, setReturnReason] = useState('');
+  const [returnImage, setReturnImage] = useState(null);
+  const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
 
 
   // --- DYNAMIC CATALOG STATE ---
@@ -233,6 +240,44 @@ export default function CustomerDashboard() {
     } catch (err) {
       console.error("Error placing online order:", err);
       alert('Payment succeeded but order creation failed. Please contact support.');
+    }
+  };
+  
+  const handleOpenReturnModal = (order) => {
+    setSelectedOrderForReturn(order);
+    setReturnReason('');
+    setReturnImage(null);
+    setShowReturnModal(true);
+  };
+
+  const handleReturnSubmit = async (e) => {
+    e.preventDefault();
+    if (!returnReason.trim()) {
+      alert("Please enter a reason for return.");
+      return;
+    }
+
+    setIsSubmittingReturn(true);
+    const formData = new FormData();
+    formData.append('order_id', selectedOrderForReturn.id);
+    formData.append('customer_id', selectedOrderForReturn.customer_id);
+    formData.append('reason', returnReason);
+    if (returnImage) {
+      formData.append('image', returnImage);
+    }
+
+    try {
+      await axios.post('http://localhost:5000/api/orders/return', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      alert('Return request submitted successfully!');
+      setShowReturnModal(false);
+      fetchPastOrders();
+    } catch (err) {
+      console.error("Error submitting return:", err);
+      alert(err.response?.data?.message || "Failed to submit return request.");
+    } finally {
+      setIsSubmittingReturn(false);
     }
   };
 
@@ -834,10 +879,23 @@ export default function CustomerDashboard() {
                       </ul>
                     </div>
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '15px', borderTop: '1px solid #f3f4f6' }}>
-                      <div style={{ fontSize: '14px', color: '#6b7280' }}>Total Amount</div>
-                      <div style={{ fontSize: '18px', fontWeight: '700', color: '#111827' }}>LKR {order.total.toLocaleString()}</div>
-                    </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '15px', borderTop: '1px solid #f3f4f6' }}>
+                        <div>
+                          <div style={{ fontSize: '14px', color: '#6b7280' }}>Total Amount</div>
+                          <div style={{ fontSize: '18px', fontWeight: '700', color: '#111827' }}>LKR {order.total.toLocaleString()}</div>
+                        </div>
+                        {(order.status?.toUpperCase() === 'DELIVERED' || order.status?.toUpperCase() === 'COMPLETED') && (
+                          <button 
+                            style={{...styles.addToCartButton, width: 'auto', backgroundColor: '#ef4444', padding: '8px 16px', marginLeft: 'auto'}}
+                            onClick={() => handleOpenReturnModal(order)}
+                          >
+                            Request Return
+                          </button>
+                        )}
+                        {order.status?.toUpperCase() === 'RETURNED' && (
+                          <div style={{color: '#ef4444', fontWeight: '600', fontSize: '14px', marginLeft: 'auto'}}>Returned</div>
+                        )}
+                      </div>
                   </div>
                 ))}
               </div>
@@ -1005,6 +1063,48 @@ export default function CustomerDashboard() {
       )}
 
       {showPaymentModal && <PaymentWrapper amount={cartTotal} onClose={() => setShowPaymentModal(false)} onPaymentSuccess={handlePaymentSuccess} />}
+      
+      {/* --- CUSTOMER RETURN MODAL --- */}
+      {showReturnModal && (
+        <div style={styles.modalOverlay} onClick={() => setShowReturnModal(false)}>
+          <div style={{...styles.packetModalContent, width: '450px'}} onClick={e => e.stopPropagation()}>
+            <div style={styles.cartHeader}>
+              <h3 style={{ margin: 0 }}>Request Return</h3>
+              <button style={{ background: 'none', border: 'none', cursor: 'pointer' }} onClick={() => setShowReturnModal(false)}><MdClose size={24} /></button>
+            </div>
+            <p style={{fontSize: '14px', color: '#6b7280', marginBottom: '20px'}}>Please provide a reason and a photo for your return request for Order #{selectedOrderForReturn?.id}:</p>
+            <form onSubmit={handleReturnSubmit}>
+              <div style={{marginBottom: '15px'}}>
+                <label style={{display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '8px'}}>Reason for Return</label>
+                <textarea 
+                  style={{
+                    width: '100%', height: '100px', padding: '12px', borderRadius: '8px', border: '1px solid #e5e7eb', resize: 'none', fontSize: '14px', fontFamily: 'inherit'
+                  }}
+                  required
+                  placeholder="Describe the issue with the product..."
+                  value={returnReason}
+                  onChange={e => setReturnReason(e.target.value)}
+                />
+              </div>
+              <div style={{marginBottom: '20px'}}>
+                <label style={{display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '8px'}}>Upload Photo (Optional)</label>
+                <input 
+                  type="file" 
+                  accept="image/*"
+                  onChange={e => setReturnImage(e.target.files[0])}
+                  style={{fontSize: '14px'}}
+                />
+              </div>
+              <div style={{display: 'flex', gap: '10px'}}>
+                <button type="button" style={{...styles.checkoutBtn, backgroundColor: '#6b7280', flex: 1}} onClick={() => setShowReturnModal(false)}>Cancel</button>
+                <button type="submit" style={{...styles.checkoutBtn, flex: 1}} disabled={isSubmittingReturn}>
+                  {isSubmittingReturn ? 'Submitting...' : 'Submit Request'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

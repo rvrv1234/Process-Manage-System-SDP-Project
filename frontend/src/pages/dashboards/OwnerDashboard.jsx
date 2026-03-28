@@ -51,6 +51,19 @@ export default function OwnerDashboard() {
   const [salesByProduct, setSalesByProduct] = useState([]);
   const [orderTrends, setOrderTrends] = useState([]);
   const [inventoryDistribution, setInventoryDistribution] = useState([]);
+  const [reportSubTab, setReportSubTab] = useState('overview');
+  const [systemAuditLog, setSystemAuditLog] = useState([]);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [receiptData, setReceiptData] = useState(null);
+  
+  // --- STATE FOR RETURN REQUESTS ---
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [selectedPOForReturn, setSelectedPOForReturn] = useState(null);
+  const [returnReason, setReturnReason] = useState('');
+  const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
+
+  // --- NEW STATE FOR CUSTOMER RETURNS (FROM CUSTOMERS) ---
+  const [customerReturns, setCustomerReturns] = useState([]);
 
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -136,7 +149,29 @@ export default function OwnerDashboard() {
     }
   };
 
-  // --- API FUNCTIONS: INVENTORY ---
+  // --- API FUNCTIONS: CUSTOMER RETURNS ---
+  const fetchCustomerReturns = async () => {
+    try {
+      const res = await axios.get('http://localhost:5000/api/orders/returns/all');
+      setCustomerReturns(res.data || []);
+    } catch (err) {
+      console.error("Error fetching customer returns:", err);
+    }
+  };
+
+  const handleUpdateCustomerReturnStatus = async (id, status) => {
+    try {
+      await axios.put(`http://localhost:5000/api/orders/returns/${id}/status`, { status });
+      alert(`Return request ${status}!`);
+      fetchCustomerReturns();
+      fetchCustomerOrders(); // Refresh orders to show 'Returned' status if approved
+    } catch (err) {
+      console.error("Error updating return status:", err);
+      alert("Failed to update return status.");
+    }
+   };
+
+   // --- API FUNCTIONS: INVENTORY ---
   const fetchInventory = async () => {
     try {
       const res = await axios.get('http://localhost:5000/api/inventory');
@@ -340,6 +375,59 @@ export default function OwnerDashboard() {
     }
   };
 
+  const handleViewReceipt = async (id) => {
+    try {
+      const res = await axios.get(`http://localhost:5000/api/suppliers/purchase-orders/${id}/receipt`);
+      setReceiptData(res.data);
+      setShowReceiptModal(true);
+    } catch (err) {
+      console.error("Error fetching receipt:", err);
+      alert("Failed to load receipt data.");
+    }
+  };
+
+  const handleReceive = async (id) => {
+    try {
+      await axios.patch(`http://localhost:5000/api/suppliers/purchase-orders/${id}/receive`);
+      alert('Order marked as Delivered!');
+      fetchPurchaseOrders();
+      fetchInventory();
+    } catch (err) {
+      console.error("Error receiving PO:", err);
+      alert("Failed to mark order as received.");
+    }
+  };
+
+  const handleOpenReturnModal = (po) => {
+    setSelectedPOForReturn(po);
+    setReturnReason('');
+    setShowReturnModal(true);
+  };
+
+  const handleRequestReturn = async (e) => {
+    e.preventDefault();
+    if (!returnReason.trim()) {
+      alert("Please enter a reason for return.");
+      return;
+    }
+    setIsSubmittingReturn(true);
+    try {
+      await axios.post('http://localhost:5000/api/returns', {
+        po_id: selectedPOForReturn.po_id,
+        supplier_id: selectedPOForReturn.supplier_id,
+        reason: returnReason
+      });
+      alert('Return request sent successfully!');
+      setShowReturnModal(false);
+      // Optionally refresh something or show status
+    } catch (err) {
+      console.error("Error sending return request:", err);
+      alert(err.response?.data?.message || "Failed to send return request.");
+    } finally {
+      setIsSubmittingReturn(false);
+    }
+  };
+
   const handleUpdatePOStatus = async (id, status) => {
     try {
       await axios.put(`http://localhost:5000/api/suppliers/purchase-orders/${id}/status`, { status });
@@ -449,6 +537,15 @@ export default function OwnerDashboard() {
     }
   };
 
+  const fetchSystemAuditLog = async () => {
+    try {
+      const res = await axios.get('http://localhost:5000/api/reports/system-audit');
+      setSystemAuditLog(res.data);
+    } catch (err) {
+      console.error("Error fetching system audit log:", err);
+    }
+  };
+
   const handleDeleteCatalog = async (id) => {
     if (!window.confirm("Are you sure you want to remove this product from the catalog?")) return;
     try {
@@ -492,6 +589,10 @@ export default function OwnerDashboard() {
       fetchOrderTrends();
       fetchInventoryDistribution();
       fetchFinancialSummary();
+      fetchSystemAuditLog();
+    }
+    if (activeTab === 'customer-returns') {
+      fetchCustomerReturns();
     }
   }, [activeTab]);
 
@@ -615,6 +716,7 @@ export default function OwnerDashboard() {
           <button style={styles.navItem(activeTab === 'production')} onClick={() => setActiveTab('production')}><MdFactory size={18} /> Production</button>
           <button style={styles.navItem(activeTab === 'delivery')} onClick={() => setActiveTab('delivery')}><MdLocalShipping size={18} /> Delivery</button>
           <button style={styles.navItem(activeTab === 'reports')} onClick={() => setActiveTab('reports')}><MdAssessment size={18} /> Reports</button>
+          <button style={styles.navItem(activeTab === 'customer-returns')} onClick={() => setActiveTab('customer-returns')}><MdCancel size={18} /> Customer Returns</button>
           {/* 👇 REPLACED SETTINGS WITH STAFF */}
           <button style={styles.navItem(activeTab === 'staff')} onClick={() => setActiveTab('staff')}><MdBadge size={18} /> Staff</button>
         </nav>
@@ -806,17 +908,17 @@ export default function OwnerDashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {purchaseOrders.filter(po => po.status !== 'Delivered').length === 0 ? (
+                      {purchaseOrders.filter(po => !['Delivered', 'Rejected'].includes(po.status)).length === 0 ? (
                         <tr><td colSpan="7" style={{ ...styles.td, textAlign: 'center' }}>No active purchase orders.</td></tr>
                       ) : (
-                        purchaseOrders.filter(po => po.status !== 'Delivered').map(po => (
+                        purchaseOrders.filter(po => !['Delivered', 'Rejected'].includes(po.status)).map(po => (
                           <tr key={po.po_id}>
                             <td style={styles.td}>#{po.po_id}</td>
                             <td style={styles.td}>{po.company_name}</td>
                             <td style={styles.td}>{po.items || 'N/A'}</td>
                             <td style={styles.td}>{new Date(po.order_date).toLocaleDateString()}</td>
                             <td style={styles.td}>LKR {Number(po.total_amount).toLocaleString()}</td>
-                            <td style={styles.td}><span style={styles.statusBadge('#f59e0b')}>{po.status}</span></td>
+                            <td style={styles.td}><span style={styles.statusBadge(po.status === 'Shipped' ? '#8b5cf6' : po.status === 'Confirmed' ? '#3b82f6' : po.status === 'Accepted' ? '#10b981' : po.status === 'Rejected' ? '#ef4444' : po.status === 'Paid' ? '#3b82f6' : '#f59e0b')}>{po.status}</span></td>
                             <td style={styles.td}>
                               {po.status === 'Rejected' && po.denial_reason && (
                                 <div style={{ fontSize: '12px', color: '#ef4444', marginBottom: '5px' }}>
@@ -824,9 +926,13 @@ export default function OwnerDashboard() {
                                 </div>
                               )}
                               <button
-                                style={styles.primaryBtn}
-                                onClick={() => handleUpdatePOStatus(po.po_id, 'Delivered')}
-                                disabled={po.status === 'Rejected'}
+                                style={{ 
+                                  ...styles.primaryBtn, 
+                                  backgroundColor: '#28a745', 
+                                  filter: (!['Shipped', 'Confirmed', 'Accepted', 'Paid'].includes(po.status)) ? 'grayscale(100%) opacity(50%)' : 'none' 
+                                }}
+                                onClick={() => handleReceive(po.po_id)}
+                                disabled={!['Shipped', 'Confirmed', 'Accepted', 'Paid'].includes(po.status)}
                               >
                                 Received
                               </button>
@@ -850,13 +956,14 @@ export default function OwnerDashboard() {
                         <th style={styles.th}>Date</th>
                         <th style={styles.th}>Total</th>
                         <th style={styles.th}>Status</th>
+                        <th style={styles.th}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {purchaseOrders.filter(po => po.status === 'Delivered').length === 0 ? (
-                        <tr><td colSpan="6" style={{ ...styles.td, textAlign: 'center' }}>No past purchase orders.</td></tr>
+                      {purchaseOrders.filter(po => ['Delivered', 'Rejected'].includes(po.status)).length === 0 ? (
+                        <tr><td colSpan="7" style={{ ...styles.td, textAlign: 'center' }}>No past purchase orders.</td></tr>
                       ) : (
-                        purchaseOrders.filter(po => po.status === 'Delivered').map(po => (
+                        purchaseOrders.filter(po => ['Delivered', 'Rejected'].includes(po.status)).map(po => (
                           <tr key={po.po_id}>
                             <td style={styles.td}>#{po.po_id}</td>
                             <td style={styles.td}>{po.company_name}</td>
@@ -870,6 +977,24 @@ export default function OwnerDashboard() {
                               {po.status === 'Rejected' && po.denial_reason && (
                                 <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '4px' }}>
                                   {po.denial_reason}
+                                </div>
+                              )}
+                            </td>
+                            <td style={styles.td}>
+                              {po.status === 'Delivered' && (
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                  <button 
+                                    style={{...styles.primaryBtn, backgroundColor: '#3b82f6', padding: '6px 14px', fontSize: '12px'}} 
+                                    onClick={() => handleViewReceipt(po.po_id)}
+                                  >
+                                    View Receipt
+                                  </button>
+                                  <button 
+                                    style={{...styles.primaryBtn, backgroundColor: '#ef4444', padding: '6px 14px', fontSize: '12px'}} 
+                                    onClick={() => handleOpenReturnModal(po)}
+                                  >
+                                    Request Return
+                                  </button>
                                 </div>
                               )}
                             </td>
@@ -1015,12 +1140,106 @@ export default function OwnerDashboard() {
         )}
 
         {/* --- 7. REPORTS --- */}
+        {activeTab === 'customer-returns' && (
+          <div style={styles.portalContainer}>
+            <div style={styles.portalHeader}>
+              <h2 style={styles.portalTitle}>Customer Return Requests</h2>
+              <button style={{...styles.addButton, width: 'auto', padding: '10px 20px'}} onClick={fetchCustomerReturns}>
+                <MdTimer size={18} /> Refresh
+              </button>
+            </div>
+            
+            <div style={{...styles.tableContainer, marginTop: '20px'}}>
+              <table style={{width: '100%', borderCollapse: 'collapse'}}>
+                <thead>
+                  <tr style={{borderBottom: '2px solid #f3f4f6', textAlign: 'left'}}>
+                    <th style={{padding: '15px', fontSize: '14px', color: '#6b7280'}}>Order ID</th>
+                    <th style={{padding: '15px', fontSize: '14px', color: '#6b7280'}}>Customer</th>
+                    <th style={{padding: '15px', fontSize: '14px', color: '#6b7280'}}>Reason</th>
+                    <th style={{padding: '15px', fontSize: '14px', color: '#6b7280'}}>Photo</th>
+                    <th style={{padding: '15px', fontSize: '14px', color: '#6b7280'}}>Date</th>
+                    <th style={{padding: '15px', fontSize: '14px', color: '#6b7280'}}>Status</th>
+                    <th style={{padding: '15px', fontSize: '14px', color: '#6b7280'}}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {customerReturns.length === 0 ? (
+                    <tr><td colSpan="7" style={{padding: '40px', textAlign: 'center', color: '#9ca3af'}}>No return requests found.</td></tr>
+                  ) : (
+                    customerReturns.map(ret => (
+                      <tr key={ret.return_id} style={{borderBottom: '1px solid #f3f4f6'}}>
+                        {console.log('Current item status:', ret.status)}
+                        <td style={{padding: '15px', fontWeight: '600'}}>#{ret.order_id}</td>
+                        <td style={{padding: '15px'}}>{ret.customer_name}</td>
+                        <td style={{padding: '15px', maxWidth: '250px'}}>{ret.reason}</td>
+                        <td style={{padding: '15px'}}>
+                          {ret.image_url ? (
+                            <a href={`http://localhost:5000${ret.image_url}`} target="_blank" rel="noreferrer">
+                              <img src={`http://localhost:5000${ret.image_url}`} alt="Return" style={{width: '50px', height: '50px', borderRadius: '4px', objectFit: 'cover'}} />
+                            </a>
+                          ) : 'No Photo'}
+                        </td>
+                        <td style={{padding: '15px'}}>{new Date(ret.request_date).toLocaleDateString()}</td>
+                        <td style={{padding: '15px'}}>
+                          <span style={{
+                            padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600',
+                            backgroundColor: ret.status?.toUpperCase() === 'PENDING' ? '#fef3c7' : (ret.status?.toUpperCase() === 'APPROVED' ? '#ecfdf5' : '#fef2f2'),
+                            color: ret.status?.toUpperCase() === 'PENDING' ? '#92400e' : (ret.status?.toUpperCase() === 'APPROVED' ? '#065f46' : '#991b1b')
+                          }}>
+                            {ret.status}
+                          </span>
+                        </td>
+                        <td style={{padding: '15px'}}>
+                          {ret.status?.toUpperCase() === 'PENDING' && (
+                            <div style={{display: 'flex', gap: '8px'}}>
+                              <button 
+                                onClick={() => handleUpdateCustomerReturnStatus(ret.return_id, 'APPROVED')}
+                                style={{backgroundColor: '#10b981', color: 'white', border: 'none', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer'}}
+                                title="Accept"
+                              >
+                                <MdCheckCircle size={18} />
+                              </button>
+                              <button 
+                                onClick={() => handleUpdateCustomerReturnStatus(ret.return_id, 'REJECTED')}
+                                style={{backgroundColor: '#ef4444', color: 'white', border: 'none', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer'}}
+                                title="Reject"
+                              >
+                                <MdCancel size={18} />
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {activeTab === 'reports' && (
           <>
             <div style={styles.pageHeader}>
               <div><h1 style={styles.pageTitle}>Reports & Analytics</h1><p style={styles.pageSubtitle}>Business insights and performance metrics</p></div>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  style={{ ...styles.navItem(reportSubTab === 'overview'), padding: '8px 15px', color: reportSubTab === 'overview' ? 'white' : '#4b5563' }}
+                  onClick={() => setReportSubTab('overview')}
+                >
+                  Overview
+                </button>
+                <button
+                  style={{ ...styles.navItem(reportSubTab === 'audit'), padding: '8px 15px', color: reportSubTab === 'audit' ? 'white' : '#4b5563' }}
+                  onClick={() => setReportSubTab('audit')}
+                >
+                  System Audit Log
+                </button>
+              </div>
             </div>
 
+            {reportSubTab === 'overview' ? (
+              <>
             {/* Top Stats for Reports */}
             <div style={{ ...styles.statsGrid, gridTemplateColumns: 'repeat(3, 1fr)', marginBottom: '40px' }}>
               <div style={styles.invStatCard}><div style={{ ...styles.statIconBox('#10b981'), marginBottom: 0, borderRadius: '10px', width: '45px', height: '45px', fontSize: '22px' }}><MdTrendingUp /></div><div><div style={{ fontSize: '12px', color: '#6b7280' }}>Total Revenue</div><div style={{ fontSize: '20px', fontWeight: '700' }}>LKR {Number(financialSummary.totalRevenue).toLocaleString()}</div></div></div>
@@ -1135,6 +1354,39 @@ export default function OwnerDashboard() {
                 </tbody>
               </table>
             </div>
+              </>
+            ) : (
+              <div style={styles.tableCard}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <h3 style={{ fontSize: '18px', fontWeight: '600' }}>System Audit Log</h3>
+                  <button style={styles.primaryBtn} onClick={() => window.print()}><MdDownload size={18} /> Print / Download</button>
+                </div>
+                <table style={styles.table}>
+                  <thead>
+                    <tr>
+                      <th style={styles.th}>Date/Time</th>
+                      <th style={styles.th}>User</th>
+                      <th style={styles.th}>Action</th>
+                      <th style={styles.th}>Target Entity</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {systemAuditLog.length === 0 ? (
+                      <tr><td colSpan="4" style={{ ...styles.td, textAlign: 'center' }}>No audit logs found.</td></tr>
+                    ) : (
+                      systemAuditLog.map((log) => (
+                        <tr key={log.audit_id || log.timestamp}>
+                          <td style={styles.td}>{new Date(log.timestamp).toLocaleString()}</td>
+                          <td style={{ ...styles.td, fontWeight: '600' }}>{log.user_name}</td>
+                          <td style={styles.td}><span style={{ backgroundColor: '#e0f2fe', color: '#0369a1', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '600' }}>{log.action_type}</span></td>
+                          <td style={styles.td}>{log.entity_name}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </>
         )}
 
@@ -1777,6 +2029,141 @@ export default function OwnerDashboard() {
       </footer>
 
       {showPaymentModal && <PaymentWrapper amount={calculateCartTotal()} onClose={() => setShowPaymentModal(false)} onPaymentSuccess={handlePaymentSuccess} />}
+      {/* --- SUPPLIER E-RECEIPT MODAL --- */}
+      {showReceiptModal && receiptData && (
+        <div style={styles.modalOverlay} onClick={() => setShowReceiptModal(false)}>
+          <div style={{...styles.modalContent, width: '700px', backgroundColor: '#ffffff', color: '#1f2937'}} onClick={e => e.stopPropagation()}>
+            {/* Printable Area */}
+            <div id="printable-receipt" style={{ padding: '20px', fontFamily: '"Inter", sans-serif' }}>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid #e5e7eb', paddingBottom: '20px', marginBottom: '20px' }}>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: '24px', fontWeight: '800', color: '#111827' }}>
+                    {receiptData.company_name}
+                  </h2>
+                  <p style={{ margin: '5px 0 0 0', color: '#4b5563', fontSize: '14px' }}>
+                    {receiptData.contact_info} <br/> {receiptData.supplier_contact}
+                  </p>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <h1 style={{ margin: 0, fontSize: '28px', fontWeight: '700', color: '#374151', letterSpacing: '1px' }}>ORDER INVOICE</h1>
+                  <p style={{ margin: '5px 0 0 0', color: '#6b7280', fontSize: '14px' }}>
+                    Invoice Date: {new Date(receiptData.order_date).toLocaleDateString()}<br/>
+                    Invoice #: INV-{receiptData.po_id}-{(new Date(receiptData.order_date).getFullYear())}
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '30px' }}>
+                <div>
+                  <p style={{ margin: 0, fontSize: '12px', color: '#6b7280', fontWeight: '600', textTransform: 'uppercase' }}>Billed To:</p>
+                  <p style={{ margin: '5px 0 0 0', fontSize: '15px', fontWeight: '600', color: '#111827' }}>Hasal Products</p>
+                  <p style={{ margin: '2px 0 0 0', fontSize: '14px', color: '#4b5563' }}>Manufacturing & Distribution HQ</p>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <p style={{ margin: 0, fontSize: '12px', color: '#6b7280', fontWeight: '600', textTransform: 'uppercase' }}>Delivery Status:</p>
+                  <p style={{ margin: '5px 0 0 0', fontSize: '15px', fontWeight: '700', color: '#10b981' }}>{receiptData.status}</p>
+                </div>
+              </div>
+
+              <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '30px' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#f3f4f6' }}>
+                    <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', color: '#4b5563', textTransform: 'uppercase', borderBottom: '1px solid #d1d5db' }}>Item Description</th>
+                    <th style={{ padding: '12px', textAlign: 'center', fontSize: '12px', color: '#4b5563', textTransform: 'uppercase', borderBottom: '1px solid #d1d5db' }}>Quantity</th>
+                    <th style={{ padding: '12px', textAlign: 'right', fontSize: '12px', color: '#4b5563', textTransform: 'uppercase', borderBottom: '1px solid #d1d5db' }}>Unit Price (LKR)</th>
+                    <th style={{ padding: '12px', textAlign: 'right', fontSize: '12px', color: '#4b5563', textTransform: 'uppercase', borderBottom: '1px solid #d1d5db' }}>Line Total (LKR)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {receiptData.items?.map((item, idx) => (
+                    <tr key={idx}>
+                      <td style={{ padding: '15px 12px', fontSize: '14px', color: '#1f2937', borderBottom: '1px solid #e5e7eb' }}>{item.name}</td>
+                      <td style={{ padding: '15px 12px', fontSize: '14px', color: '#1f2937', textAlign: 'center', borderBottom: '1px solid #e5e7eb' }}>{item.quantity}</td>
+                      <td style={{ padding: '15px 12px', fontSize: '14px', color: '#1f2937', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>{Number(item.unit_price).toLocaleString()}</td>
+                      <td style={{ padding: '15px 12px', fontSize: '14px', color: '#1f2937', textAlign: 'right', fontVariantNumeric: 'tabular-nums', borderBottom: '1px solid #e5e7eb' }}>{(item.quantity * item.unit_price).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <div style={{ width: '250px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '2px solid #111827' }}>
+                    <span style={{ fontSize: '16px', fontWeight: '700', color: '#111827' }}>Grand Total</span>
+                    <span style={{ fontSize: '18px', fontWeight: '800', color: '#111827' }}>LKR {Number(receiptData.total_amount).toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '15px', padding: '20px', borderTop: '1px solid #e5e7eb', marginTop: '20px' }}>
+              <button style={{ padding: '10px 20px', border: '1px solid #d1d5db', backgroundColor: 'white', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', color: '#374151' }} onClick={() => setShowReceiptModal(false)}>
+                Close
+              </button>
+              <button style={{ padding: '10px 20px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }} onClick={() => {
+                const content = document.getElementById('printable-receipt').innerHTML;
+                const original = document.body.innerHTML;
+                document.body.innerHTML = content;
+                window.print();
+                document.body.innerHTML = original;
+                window.location.reload(); 
+              }}>
+                Print Invoice
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- RETURN REQUEST MODAL --- */}
+      {showReturnModal && (
+        <div style={styles.modalOverlay} onClick={() => setShowReturnModal(false)}>
+          <div style={{...styles.modalContent, width: '450px'}} onClick={e => e.stopPropagation()}>
+            <div style={styles.modalHeader}>
+              <h3 style={styles.modalTitle}>Request Return</h3>
+              <button style={styles.closeBtn} onClick={() => setShowReturnModal(false)}><MdClose size={24} /></button>
+            </div>
+            <form onSubmit={handleRequestReturn} style={{padding: '10px 0'}}>
+              <p style={{fontSize: '14px', color: '#6b7280', marginBottom: '15px'}}>Please explain why you are requesting a return for PO #{selectedPOForReturn?.po_id}:</p>
+              <textarea 
+                style={{
+                  width: '100%', 
+                  height: '120px', 
+                  padding: '12px', 
+                  borderRadius: '8px', 
+                  border: '1px solid #e5e7eb',
+                  resize: 'none',
+                  fontSize: '14px',
+                  fontFamily: 'inherit'
+                }}
+                required
+                placeholder="e.g. Received damaged goods, incorrect weight, etc."
+                value={returnReason}
+                onChange={e => setReturnReason(e.target.value)}
+              />
+              <div style={{display: 'flex', gap: '10px', marginTop: '20px'}}>
+                <button 
+                  type="button"
+                  style={{...styles.updateBtn, flex: 1, backgroundColor: '#6b7280'}} 
+                  onClick={() => setShowReturnModal(false)}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  style={{...styles.updateBtn, flex: 1, backgroundColor: '#ef4444'}} 
+                  disabled={isSubmittingReturn}
+                >
+                  {isSubmittingReturn ? 'Sending...' : 'Confirm Request'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

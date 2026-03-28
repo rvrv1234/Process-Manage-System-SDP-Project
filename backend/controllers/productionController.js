@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { logAudit } = require('../utils/auditLogger');
 
 // 1. Get All Production Batches
 const getBatches = async (req, res) => {
@@ -17,35 +18,87 @@ const getBatches = async (req, res) => {
     }
 };
 
-// 2. Update Batch Status
+// 2. Update Batch Status (Now handles Order Bundles by order_id)
 const updateBatchStatus = async (req, res) => {
-    const { id } = req.params;
-    const { status } = req.body;
+    const { id } = req.params; 
+    console.log('Attempting to start production for ID:', id);
+    const { status } = req.body; // 'In Process' or 'Completed'
 
+    const client = await pool.connect();
     try {
-        let query = "UPDATE production_batches SET status = $1 WHERE batch_id = $2 RETURNING *";
-        let params = [status, id];
+        await client.query('BEGIN');
 
+        // Bypassing 'orders_status_check': Not needed anymore! The constraints have been globally updated to accept 'Ready for Delivery'.
+        // Synchronizing explicitly per User Instruction: orders.status and production_batches BOTH get 'Ready for Delivery'
+        let orderStatus = status === 'Completed' ? 'Ready for Delivery' : 'PROCESSING';
+        await client.query("UPDATE orders SET status = $1 WHERE id = $2", [orderStatus, id]);
+
+        // Status Sync: Push 'Ready for Delivery' straight onto production_batches so Delivery Board locks it
+        let batchStatus = status === 'Completed' ? 'Ready for Delivery' : status;
+        let batchQuery = "UPDATE production_batches SET status = $1 WHERE order_id = $2 RETURNING *";
         if (status === 'Completed') {
-            query = "UPDATE production_batches SET status = $1, completed_date = CURRENT_DATE WHERE batch_id = $2 RETURNING *";
+            batchQuery = "UPDATE production_batches SET status = $1, completed_date = CURRENT_DATE WHERE order_id = $2 RETURNING *";
+            
+            // Generate a tracking hook into the distinct deliveries tables natively dropping 'Ready for Pickup'
+            await client.query("INSERT INTO deliveries (order_id, delivery_status) VALUES ($1, 'Ready for Pickup')", [id]);
         } else if (status === 'In Process') {
-            query = "UPDATE production_batches SET status = $1, start_date = CURRENT_DATE WHERE batch_id = $2 RETURNING *";
+            batchQuery = "UPDATE production_batches SET status = $1, start_date = CURRENT_DATE WHERE order_id = $2 RETURNING *";
+        }
+        await client.query(batchQuery, [batchStatus, id]);
+
+        await client.query('COMMIT');
+
+        // Audit Log Fix: Ensure req.user.id exists securely before passing it.
+        if (!req.user || !req.user.id) {
+            console.error('Audit Log Blocked: req.user.id is officially undefined!');
+        } else {
+            let auditAction = status === 'Completed' ? 'COMPLETE_BUNDLE_PRODUCTION' : 'START_BUNDLE_PRODUCTION';
+            await logAudit(req.user.id, auditAction, 'orders', id);
         }
 
-        const result = await pool.query(query, params);
+        res.json({ message: "Status updated successfully" });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('--- PRODUCTION ERROR TRACE ---', error);
+        res.status(500).json({ message: "Server Error" });
+    } finally {
+        client.release();
+    }
+};
 
-        if (result.rows.length === 0) {
-            return res.status(404).json({ message: "Batch not found" });
-        }
-
-        res.json(result.rows[0]);
+// 3. Get Grouped Orders for Bundling
+const getGroupedOrders = async (req, res) => {
+    try {
+        const query = `
+            SELECT o.order_id, u.name as customer_name, 
+                   MAX(b.status) as status, 
+                   MIN(b.due_date) as due_date,
+                   MAX(b.assigned_team) as assigned_team,
+                   (
+                       SELECT STRING_AGG(oi.quantity || 'x ' || p.name || ' (' || oi.packet_size || ')', ', ')
+                       FROM orderitems oi
+                       JOIN products p ON oi.product_id = p.product_id
+                       WHERE oi.order_id = o.order_id
+                   ) as merged_items
+            FROM orders o
+            JOIN customers c ON o.customer_id = c.customer_id
+            JOIN users u ON c.user_id = u.id
+            JOIN production_batches b ON o.order_id = b.order_id
+            GROUP BY o.order_id, u.name
+            ORDER BY o.order_id DESC
+        `;
+        const result = await pool.query(query);
+        res.json(result.rows);
     } catch (err) {
-        console.error("Error updating batch status:", err.message);
+        console.error("Error fetching grouped orders:", err.message);
         res.status(500).json({ message: "Server Error" });
     }
 };
 
+
+
 module.exports = {
     getBatches,
-    updateBatchStatus
+    updateBatchStatus,
+    getGroupedOrders
 };

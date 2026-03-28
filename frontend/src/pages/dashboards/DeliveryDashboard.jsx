@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import {
   MdDashboard, MdShoppingCart, MdLocalShipping, MdNotifications, MdLogout, 
   MdSearch, MdAccessTime, MdCheckCircle, MdVisibility, MdFileDownload,
@@ -9,30 +10,61 @@ import { useAuth } from '../../context/AuthContext';
 
 export default function DeliveryDashboard() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState('available');
   const [showProfileModal, setShowProfileModal] = useState(false);
   const navigate = useNavigate();
 
-  // --- MOCK DATA ---
-  // Tab 1: Dashboard Current Delivery
-  const currentDelivery = {
-    id: 'ORD002', status: 'In Transit', destination: 'Food Mart Chain, Kandy', 
-    eta: '2 hours remaining', vehicle: 'Tata Ace (WP CA-1234)', progress: 60
+  // --- API DATA STATES ---
+  const [availableOrders, setAvailableOrders] = useState([]);
+  const [myDeliveries, setMyDeliveries] = useState([]);
+
+  const fetchData = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const config = { headers: { Authorization: `Bearer ${token}` } };
+      
+      const [availRes, myRes] = await Promise.all([
+        axios.get('http://localhost:5000/api/delivery/available', config),
+        axios.get('http://localhost:5000/api/delivery/my-deliveries', config)
+      ]);
+      console.log('Fetched Orders for Delivery:', availRes.data);
+      console.log('Fetched My Deliveries:', myRes.data);
+      setAvailableOrders(availRes.data);
+      setMyDeliveries(myRes.data);
+    } catch (err) {
+      console.error("Failed to load delivery data", err);
+    }
   };
 
-  // Tab 2: Assigned Orders
-  const assignedOrders = [
-    { id: 'ORD002', pickup: 'Main Warehouse, Colombo', delivery: 'Food Mart Chain, Kandy', items: 'Dry Goods (500kg)', deadline: '2025-10-27 14:00', status: 'In Transit' },
-    { id: 'ORD003', pickup: 'Main Warehouse, Colombo', delivery: 'Metro Supermarket, Galle', items: 'Spices (200kg)', deadline: '2025-10-28 10:00', status: 'Ready for Pickup' },
-    { id: 'ORD004', pickup: 'Production Facility B', delivery: 'Local Distributors', items: 'Mixed Batch (150kg)', deadline: '2025-10-28 16:00', status: 'Ready for Pickup' },
-  ];
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
-  // Tab 3: Delivery History
-  const deliveryHistory = [
-    { id: 'DEL001', orderId: 'ORD001', dest: 'Nimal Restaurant', date: '2025-10-25', duration: '4 hrs 30m', status: 'Delivered', rating: 5.0 },
-    { id: 'DEL002', orderId: 'ORD005', dest: 'Fresh Market', date: '2025-10-24', duration: '3 hrs 15m', status: 'Delivered', rating: 4.5 },
-    { id: 'DEL003', orderId: 'ORD008', dest: 'Spice Exports Ltd', date: '2025-10-22', duration: '5 hrs 00m', status: 'Delivered', rating: 5.0 },
-  ];
+  const handleClaimOrder = async (orderId) => {
+    try {
+      const token = localStorage.getItem('token');
+      await axios.patch(`http://localhost:5000/api/delivery/claim/${orderId}`, {}, {
+         headers: { Authorization: `Bearer ${token}` } 
+      });
+      fetchData();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to claim order');
+    }
+  };
+
+  // Helper to extract city from address string
+  const extractCity = (address) => {
+    if (!address) return 'Unknown Location';
+    const knownCities = ['Galle', 'Baddegama', 'Kalegana', 'Imaduwa', 'Wanduramba', 'Colombo', 'Kandy'];
+    for (let city of knownCities) {
+        if (address.toLowerCase().includes(city.toLowerCase())) return city;
+    }
+    return address.split(',').pop().trim(); // Fallback to last segment
+  };
+
+  const currentDelivery = myDeliveries.find(d => d.status === 'Picked Up') || null;
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -129,8 +161,8 @@ export default function DeliveryDashboard() {
         </div>
         <div style={styles.navSection}>
           <button style={styles.navItem(activeTab === 'dashboard')} onClick={() => setActiveTab('dashboard')}><MdDashboard size={18} /> Dashboard</button>
-          <button style={styles.navItem(activeTab === 'orders')} onClick={() => setActiveTab('orders')}><MdShoppingCart size={18} /> Orders</button>
-          <button style={styles.navItem(activeTab === 'delivery')} onClick={() => setActiveTab('delivery')}><MdLocalShipping size={18} /> Delivery</button>
+          <button style={styles.navItem(activeTab === 'available')} onClick={() => setActiveTab('available')}><MdShoppingCart size={18} /> Available Orders</button>
+          <button style={styles.navItem(activeTab === 'my-deliveries')} onClick={() => setActiveTab('my-deliveries')}><MdLocalShipping size={18} /> My Deliveries</button>
         </div>
         <div style={styles.userSection}>
           <div style={{position:'relative'}}><MdNotifications size={24} color="#9ca3af" /><span style={{position:'absolute', top:'-6px', right:'-6px', backgroundColor:'#ef4444', color:'white', fontSize:'10px', width:'16px', height:'16px', borderRadius:'50%', display:'flex', justifyContent:'center', alignItems:'center'}}>1</span></div>
@@ -180,91 +212,122 @@ export default function DeliveryDashboard() {
             </div>
 
             {/* Current Delivery Card */}
+            {currentDelivery ? (
             <div style={styles.deliveryCard}>
               <div style={styles.dcHeader}>
-                <div><h3 style={{fontSize:'20px', fontWeight:'700', marginBottom:'5px'}}>Current Delivery</h3><p style={{color:'#6b7280'}}>Order ID: {currentDelivery.id}</p></div>
+                <div><h3 style={{fontSize:'20px', fontWeight:'700', marginBottom:'5px'}}>Current Active Delivery</h3><p style={{color:'#6b7280'}}>Order ID: {currentDelivery.id}</p></div>
                 <span style={styles.statusBadge(currentDelivery.status)}>{currentDelivery.status}</span>
               </div>
               
               <div style={styles.dcDetailRow}>
-                <div style={styles.dcDetailItem}><div style={styles.iconBox('#f3f4f6')}><MdLocationOn color="#f59e0b"/></div><div><div style={{fontSize:'12px',color:'#6b7280'}}>Destination</div><div style={{fontWeight:'600'}}>{currentDelivery.destination}</div></div></div>
-                <div style={styles.dcDetailItem}><div style={styles.iconBox('#f3f4f6')}><MdAccessTime color="#f59e0b"/></div><div><div style={{fontSize:'12px',color:'#6b7280'}}>ETA</div><div style={{fontWeight:'600'}}>{currentDelivery.eta}</div></div></div>
-                <div style={styles.dcDetailItem}><div style={styles.iconBox('#f3f4f6')}><MdDirectionsCar color="#f59e0b"/></div><div><div style={{fontSize:'12px',color:'#6b7280'}}>Vehicle</div><div style={{fontWeight:'600'}}>{currentDelivery.vehicle}</div></div></div>
+                <div style={styles.dcDetailItem}><div style={styles.iconBox('#f3f4f6')}><MdLocationOn color="#f59e0b"/></div><div><div style={{fontSize:'12px',color:'#6b7280'}}>Destination City</div><div style={{fontWeight:'600'}}>{extractCity(currentDelivery.delivery)}</div></div></div>
+                <div style={styles.dcDetailItem}><div style={styles.iconBox('#f3f4f6')}><MdAccessTime color="#f59e0b"/></div><div><div style={{fontSize:'12px',color:'#6b7280'}}>Deadline</div><div style={{fontWeight:'600'}}>{new Date(currentDelivery.deadline).toLocaleDateString()}</div></div></div>
+                <div style={styles.dcDetailItem}><div style={styles.iconBox('#f3f4f6')}><MdDirectionsCar color="#f59e0b"/></div><div><div style={{fontSize:'12px',color:'#6b7280'}}>Vehicle</div><div style={{fontWeight:'600'}}>Delivery Fleet</div></div></div>
               </div>
 
               <div style={styles.progressContainer}>
                 <div style={styles.progressLabels}><span>Picked Up</span><span>In Transit</span><span>Delivered</span></div>
-                <div style={styles.progressBarTrack}><div style={styles.progressBarFill(currentDelivery.progress)}></div></div>
+                <div style={styles.progressBarTrack}><div style={styles.progressBarFill(50)}></div></div>
               </div>
 
               <div style={styles.dcActions}>
-                <button style={styles.primaryBtn}><MdLocalShipping /> Update Status</button>
+                <button style={styles.primaryBtn}><MdLocalShipping /> Complete Delivery</button>
                 <button style={styles.outlineBtn}><MdMap /> View Route</button>
-                <button style={styles.outlineBtn}><MdSupportAgent /> Contact Support</button>
               </div>
             </div>
+            ) : (
+                <div style={{backgroundColor:'white', padding:'40px', borderRadius:'16px', textAlign:'center', border:'1px dashed #d1d5db', color:'#6b7280'}}>
+                    <MdLocalShipping size={48} color="#e5e7eb" style={{marginBottom:'10px'}}/>
+                    <h3>No Active Deliveries</h3>
+                    <p>You have no ongoing deliveries. Claim a new order from the Available Orders tab!</p>
+                </div>
+            )}
           </>
         )}
 
-        {/* --- TAB 2: ORDERS --- */}
-        {activeTab === 'orders' && (
+        {/* --- TAB 2: AVAILABLE ORDERS --- */}
+        {activeTab === 'available' && (
           <>
             <div style={styles.pageHeader}>
-              <div><h1 style={styles.pageTitle}>Assigned Orders</h1><p style={styles.pageSubtitle}>Orders ready for pickup and delivery</p></div>
+              <div><h1 style={styles.pageTitle}>Available Orders</h1><p style={styles.pageSubtitle}>Packages waiting in the warehouse to be claimed</p></div>
             </div>
 
             <div style={styles.smallStatsGrid}>
-              {[{l:'Total Assigned',v:5,c:'#f59e0b',i:<MdShoppingCart/>},{l:'Ready for Pickup',v:2,c:'#eab308',i:<MdAccessTime/>},{l:'In Transit',v:1,c:'#f97316',i:<MdLocalShipping/>},{l:'Delivered',v:2,c:'#10b981',i:<MdCheckCircle/>}].map((s,i)=>(
+              {[{l:'Waiting for Pickup',v:availableOrders.length,c:'#f59e0b',i:<MdShoppingCart/>},{l:'Urgent Deliveries',v:0,c:'#ef4444',i:<MdAccessTime/>}].map((s,i)=>(
                 <div key={i} style={styles.smallStatCard}><div style={{...styles.iconBox(s.c),width:'45px',height:'45px',fontSize:'22px'}}>{s.i}</div><div><div style={{fontSize:'12px',color:'#6b7280'}}>{s.l}</div><div style={{fontSize:'20px',fontWeight:'700'}}>{s.v}</div></div></div>
               ))}
             </div>
 
             <div style={styles.tableCard}>
               <div style={styles.tableToolbar}>
-                <h3 style={{fontSize:'18px', fontWeight:'600'}}>Assigned Orders</h3>
-                <div style={styles.searchBox}><MdSearch color="#9ca3af" size={22} /><input type="text" placeholder="Search orders..." style={styles.searchInput} /></div>
+                <h3 style={{fontSize:'18px', fontWeight:'600'}}>All Unassigned Deliveries</h3>
+                <div style={styles.searchBox}><MdSearch color="#9ca3af" size={22} /><input type="text" placeholder="Search locations..." style={styles.searchInput} /></div>
               </div>
               <table style={styles.table}>
-                <thead><tr><th style={styles.th}>Order ID</th><th style={styles.th}>Pickup Location</th><th style={styles.th}>Delivery Location</th><th style={styles.th}>Items</th><th style={styles.th}>Deadline</th><th style={styles.th}>Status</th><th style={styles.th}>Actions</th></tr></thead>
+                <thead><tr><th style={styles.th}>Order #ID</th><th style={styles.th}>City / Area</th><th style={styles.th}>Full Address</th><th style={styles.th}>Contents</th><th style={styles.th}>Status</th><th style={styles.th}>Actions</th></tr></thead>
                 <tbody>
-                  {assignedOrders.map(o => (
-                    <tr key={o.id}><td style={styles.td}>{o.id}</td><td style={styles.td}>{o.pickup}</td><td style={styles.td}>{o.delivery}</td><td style={styles.td}>{o.items}</td><td style={styles.td}>{o.deadline}</td><td style={styles.td}><span style={styles.statusBadge(o.status)}>{o.status}</span></td><td style={styles.td}><div style={{display:'flex', gap:'10px'}}><MdVisibility style={{color:'#6b7280', cursor:'pointer'}} /><MdLocalShipping style={{color:'#f59e0b', cursor:'pointer'}} /></div></td></tr>
+                  {availableOrders.map(o => (
+                    <tr key={o.id}>
+                        <td style={styles.td}><strong>#{o.id}</strong></td>
+                        <td style={styles.td}>
+                            <span style={{backgroundColor:'#fef3c7', padding:'6px 12px', borderRadius:'6px', color:'#92400e', fontWeight:'600'}}>{extractCity(o.delivery)}</span>
+                        </td>
+                        <td style={styles.td}><div style={{fontSize:'12px', color:'#6b7280'}}>{o.delivery}</div></td>
+                        <td style={styles.td}>
+                            <div style={{fontSize:'13px', lineHeight:'1.4', maxWidth:'250px'}}>{o.items}</div>
+                        </td>
+                        <td style={styles.td}>
+                            <span style={styles.statusBadge(o.status)}>{o.status}</span>
+                        </td>
+                        <td style={styles.td}>
+                            <button onClick={() => handleClaimOrder(o.delivery_id)} style={{...styles.primaryBtn, backgroundColor:'#10b981', padding:'8px 16px'}}><MdCheckCircle /> Accept Order</button>
+                        </td>
+                    </tr>
                   ))}
+                  {availableOrders.length === 0 && <tr><td colSpan="6" style={{textAlign:'center', padding:'30px', color:'#6b7280'}}>No available orders right now.</td></tr>}
                 </tbody>
               </table>
             </div>
           </>
         )}
 
-        {/* --- TAB 3: DELIVERY HISTORY --- */}
-        {activeTab === 'delivery' && (
+        {/* --- TAB 3: MY DELIVERIES --- */}
+        {activeTab === 'my-deliveries' && (
           <>
              <div style={styles.pageHeader}>
-              <div><h1 style={styles.pageTitle}>Delivery History</h1><p style={styles.pageSubtitle}>Past delivery performance records</p></div>
-            </div>
-
-            <div style={styles.smallStatsGrid}>
-              {[{l:'Total Deliveries',v:25},{l:'On-Time Rate',v:'96%',c:'#10b981'},{l:'Avg Time',v:'4.2 hrs'},{l:'Customer Rating',v:'4.8/5',c:'#f59e0b'}].map((s,i)=>(
-                <div key={i} style={{...styles.smallStatCard, height:'100px', flexDirection:'column', alignItems:'flex-start', justifyContent:'center', gap:'5px'}}>
-                   <div style={{fontSize:'12px',color:'#6b7280'}}>{s.l}</div><div style={{fontSize:'24px',fontWeight:'700', color:s.c || '#1f2937'}}>{s.v}</div>
-                </div>
-              ))}
+              <div><h1 style={styles.pageTitle}>My Deliveries</h1><p style={styles.pageSubtitle}>Track your active assignments and completed trips</p></div>
             </div>
 
             <div style={styles.tableCard}>
               <div style={styles.tableToolbar}>
-                <div style={styles.searchBox}><MdSearch color="#9ca3af" size={22} /><input type="text" placeholder="Search history..." style={styles.searchInput} /></div>
+                <h3 style={{fontSize:'18px', fontWeight:'600'}}>Your Delivery Queue</h3>
                 <div style={{display:'flex', gap:'10px'}}>
-                  <select style={{padding:'10px', borderRadius:'8px', border:'1px solid #d1d5db'}}><option>This Month</option></select>
                   <button style={styles.outlineBtn}><MdFileDownload /> Export</button>
                 </div>
               </div>
               <table style={styles.table}>
-                <thead><tr><th style={styles.th}>Delivery ID</th><th style={styles.th}>Order ID</th><th style={styles.th}>Destination</th><th style={styles.th}>Completed Date</th><th style={styles.th}>Duration</th><th style={styles.th}>Status</th><th style={styles.th}>Rating</th><th style={styles.th}>Actions</th></tr></thead>
+                <thead><tr><th style={styles.th}>Order ID</th><th style={styles.th}>Destination</th><th style={styles.th}>Date</th><th style={styles.th}>Contents</th><th style={styles.th}>Status</th><th style={styles.th}>Actions</th></tr></thead>
                 <tbody>
-                  {deliveryHistory.map(d => (
-                    <tr key={d.id}><td style={styles.td}>{d.id}</td><td style={styles.td}>{d.orderId}</td><td style={styles.td}>{d.dest}</td><td style={styles.td}>{d.date}</td><td style={styles.td}>{d.duration}</td><td style={styles.td}><span style={styles.statusBadge(d.status)}>{d.status}</span></td><td style={styles.td}><div style={{display:'flex',alignItems:'center',gap:'5px'}}><MdStar color="#f59e0b"/>{d.rating}</div></td><td style={styles.td}><MdVisibility style={{color:'#6b7280', cursor:'pointer'}} /></td></tr>
+                  {myDeliveries.map(d => (
+                    <tr key={d.id}>
+                        <td style={styles.td}>#{d.id}</td>
+                        <td style={styles.td}>
+                            <strong style={{display:'block'}}>{extractCity(d.dest)}</strong>
+                            <span style={{fontSize:'12px', color:'#6b7280'}}>{d.dest}</span>
+                        </td>
+                        <td style={styles.td}>{new Date(d.date).toLocaleDateString()}</td>
+                        <td style={styles.td}><div style={{fontSize:'13px', lineHeight:'1.4', maxWidth:'200px'}}>{d.items}</div></td>
+                        <td style={styles.td}><span style={styles.statusBadge(d.status)}>{d.status}</span></td>
+                        <td style={styles.td}>
+                            {d.status !== 'Delivered' ? (
+                                <button style={{...styles.primaryBtn, backgroundColor:'#3b82f6', padding:'6px 12px'}}><MdLocalShipping /> Process</button>
+                            ) : (
+                                <span style={{color:'#10b981', fontSize:'13px', fontWeight:'600'}}>Completed</span>
+                            )}
+                        </td>
+                    </tr>
                   ))}
+                  {myDeliveries.length === 0 && <tr><td colSpan="6" style={{textAlign:'center', padding:'30px', color:'#6b7280'}}>You have no assigned deliveries.</td></tr>}
                 </tbody>
               </table>
             </div>
