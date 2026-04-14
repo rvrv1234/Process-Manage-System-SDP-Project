@@ -24,7 +24,7 @@ import { useAuth } from '../../context/AuthContext';
 export default function CustomerDashboard() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, login } = useAuth();
 
   // --- NEW STATE FOR CART FUNCTIONALITY ---
   const [cartItems, setCartItems] = useState([]);
@@ -35,6 +35,8 @@ export default function CustomerDashboard() {
   const [orderQuantity, setOrderQuantity] = useState(1); // Track how many they want to buy from modal
   const [pastOrders, setPastOrders] = useState([]); // Track completed checkouts locally
   const [showProfileModal, setShowProfileModal] = useState(false); // Toggle for user profile visibility
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileFormData, setProfileFormData] = useState({ full_name: '', phone_number: '', address: '' });
   const [paymentMethod, setPaymentMethod] = useState('cod'); // 'cod' or 'online'
   const [showPaymentModal, setShowPaymentModal] = useState(false); // Stripe modal
   
@@ -285,6 +287,32 @@ export default function CustomerDashboard() {
     localStorage.removeItem('token');
     localStorage.removeItem('userRole');
     navigate('/login');
+  };
+
+  const handleEditProfileInit = () => {
+    setProfileFormData({
+      full_name: user?.name || '',
+      phone_number: user?.phone || '',
+      address: user?.address || ''
+    });
+    setIsEditingProfile(true);
+  };
+
+  const handleSaveProfile = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await axios.put('http://localhost:5000/api/customers/update-profile', profileFormData, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      // Merge updated fields back into existing user locally
+      const updatedUser = { ...user, ...res.data.user };
+      login(updatedUser, token); // This updates localStorage and AuthContext
+      setIsEditingProfile(false);
+      alert('Profile updated successfully!');
+    } catch (err) {
+      console.error('Error saving profile:', err);
+      alert(err.response?.data?.message || 'Failed to update profile');
+    }
   };
 
   // --- STYLES ---
@@ -1043,9 +1071,31 @@ export default function CustomerDashboard() {
             </div>
             <div style={{ textAlign: 'center', padding: '20px 0' }}>
               <div style={{ width: '80px', height: '80px', borderRadius: '50%', backgroundColor: '#f59e0b', display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'white', fontSize: '32px', fontWeight: '700', margin: '0 auto 15px' }}>{user?.name?.substring(0, 2).toUpperCase() || 'CU'}</div>
-              <h2 style={{ margin: '0 0 5px 0' }}>{user?.name || 'Customer'}</h2>
-              <p style={{ margin: 0, color: '#6b7280', fontSize: '14px' }}>kasun@gmail.com</p>
-              <div style={{ marginTop: '20px', display: 'inline-block', backgroundColor: '#fef3c7', color: '#92400e', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }}>Valued Customer</div>
+
+              {!isEditingProfile ? (
+                <>
+                  <h2 style={{ margin: '0 0 5px 0' }}>{user?.name || 'Customer'}</h2>
+                  <p style={{ margin: 0, color: '#6b7280', fontSize: '14px' }}>{user?.email}</p>
+                  <p style={{ margin: '5px 0 0 0', color: '#6b7280', fontSize: '14px' }}>Phone: {user?.phone || 'No phone provided'}</p>
+                  <p style={{ margin: '5px 0 0 0', color: '#6b7280', fontSize: '14px' }}>Address: {user?.address || 'No address provided'}</p>
+                  <div style={{ marginTop: '20px', display: 'inline-block', backgroundColor: '#fef3c7', color: '#92400e', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }} onClick={handleEditProfileInit}>Edit Account</div>
+                </>
+              ) : (
+                <div style={{ textAlign: 'left', marginTop: '10px' }}>
+                  <div style={{ marginBottom: '10px' }}>
+                    <label style={{ display: 'block', fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Full Name</label>
+                    <input type="text" value={profileFormData.full_name} onChange={e => setProfileFormData({...profileFormData, full_name: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', boxSizing: 'border-box' }} />
+                  </div>
+                  <div style={{ marginBottom: '10px' }}>
+                    <label style={{ display: 'block', fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Phone Number</label>
+                    <input type="text" value={profileFormData.phone_number} onChange={e => setProfileFormData({...profileFormData, phone_number: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', boxSizing: 'border-box' }} />
+                  </div>
+                  <div style={{ marginBottom: '10px' }}>
+                    <label style={{ display: 'block', fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Address</label>
+                    <input type="text" value={profileFormData.address} onChange={e => setProfileFormData({...profileFormData, address: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', boxSizing: 'border-box' }} />
+                  </div>
+                </div>
+              )}
             </div>
             <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '20px', marginTop: '10px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '14px' }}>
@@ -1057,7 +1107,15 @@ export default function CustomerDashboard() {
                 <span style={{ fontWeight: '600', color: '#10b981' }}>Active</span>
               </div>
             </div>
-            <button style={{ ...styles.checkoutBtn, marginTop: '30px' }} onClick={() => setShowProfileModal(false)}>Close</button>
+
+            {isEditingProfile ? (
+              <div style={{ display: 'flex', gap: '10px', marginTop: '30px' }}>
+                <button style={{ ...styles.checkoutBtn, flex: 1, backgroundColor: '#6b7280' }} onClick={() => setIsEditingProfile(false)}>Cancel</button>
+                <button style={{ ...styles.checkoutBtn, flex: 1 }} onClick={handleSaveProfile}>Save</button>
+              </div>
+            ) : (
+              <button style={{ ...styles.checkoutBtn, marginTop: '30px' }} onClick={() => setShowProfileModal(false)}>Close</button>
+            )}
           </div>
         </div>
       )}

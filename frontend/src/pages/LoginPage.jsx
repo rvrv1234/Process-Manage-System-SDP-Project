@@ -2,6 +2,7 @@ import { useState } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
+import '../styles/Auth.css';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -48,7 +49,6 @@ export default function LoginPage() {
       else if (userData.role === 'delivery_manager') {
         // You haven't asked for a delivery dashboard yet, but this prevents it from going to owner
          
-
         navigate('/dashboard/delivery');
       }
       else {
@@ -65,39 +65,55 @@ export default function LoginPage() {
     }
   };
 
-  // ... (Keep the rest of your Glassmorphism styles and JSX same as before)
-  const glassStyle = {
-    background: 'rgba(255, 255, 255, 0.1)',
-    backdropFilter: 'blur(10px)',
-    WebkitBackdropFilter: 'blur(10px)',
-    borderRadius: '16px',
-    border: '1px solid rgba(255, 255, 255, 0.3)',
-    padding: '40px',
-    width: '350px',
-    boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
-    textAlign: 'center',
-    color: 'white'
-  };
-
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-      <div style={glassStyle}>
-        <h2 style={{ marginBottom: '20px', fontWeight: '300', letterSpacing: '1px' }}>Hasal Products</h2>
-        <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-          <input type="email" placeholder="Email Address" value={email} onChange={(e) => setEmail(e.target.value)} required style={{ padding: '10px', borderRadius: '5px', border: 'none', backgroundColor: 'rgba(255,255,255,0.9)', color: '#000' }} />
-          <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required style={{ padding: '10px', borderRadius: '5px', border: 'none', backgroundColor: 'rgba(255,255,255,0.9)', color: '#000' }} />
-          <div style={{ textAlign: 'right', marginBottom: '5px' }}>
-            <Link to="/forgot-password" style={{ color: '#fff', fontSize: '12px', opacity: 0.7, textDecoration: 'none' }}>Forgot Password?</Link>
+    <div className="auth-page">
+      <div className="auth-card">
+        <header className="auth-header">
+          <h1>Hasal Products</h1>
+          <p>Login to manage your business</p>
+        </header>
+
+        <form onSubmit={handleLogin} className="auth-form">
+          <div className="auth-form-group">
+            <label className="auth-label">Email Address</label>
+            <input 
+              type="email" 
+              placeholder="name@company.com" 
+              value={email} 
+              onChange={(e) => setEmail(e.target.value)} 
+              required 
+              className="auth-input"
+            />
           </div>
-          {error && <p style={{ color: '#ff6b6b', fontSize: '14px', margin: 0 }}>{error}</p>}
-          <button type="submit" disabled={loading} style={{ padding: '12px', background: loading ? '#ccc' : 'linear-gradient(45deg, #00d2ff 0%, #3a7bd5 100%)', border: 'none', borderRadius: '5px', color: 'white', fontWeight: 'bold', marginTop: '10px', cursor: loading ? 'not-allowed' : 'pointer' }}>
+
+          <div className="auth-form-group">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <label className="auth-label">Password</label>
+              <Link to="/forgot-password" size="sm" className="auth-forgot-link">
+                Forgot Password?
+              </Link>
+            </div>
+            <input 
+              type="password" 
+              placeholder="••••••••" 
+              value={password} 
+              onChange={(e) => setPassword(e.target.value)} 
+              required 
+              className="auth-input"
+            />
+          </div>
+
+          {error && <p className="auth-error">{error}</p>}
+
+          <button type="submit" disabled={loading} className="auth-button">
             {loading ? 'Logging in...' : 'Log In'}
           </button>
         </form>
-        <p style={{ marginTop: '20px', fontSize: '14px', color: 'rgba(255,255,255,0.7)' }}>
-          Don't have an account? <Link to="/register" style={{ color: '#4facfe', textDecoration: 'none' }}>Register here</Link>
+
+        <p className="auth-link-container">
+          Don't have an account? <Link to="/register" className="auth-link">Register here</Link>
         </p>
       </div>
     </div>
   );
-}
+}

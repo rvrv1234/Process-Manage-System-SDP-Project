@@ -9,10 +9,12 @@ import {
 import { useAuth } from '../../context/AuthContext';
 
 export default function SupplierDashboard() {
-  const { user } = useAuth();
+  const { user, login } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [filter, setFilter] = useState('Total');
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileFormData, setProfileFormData] = useState({ full_name: '', address: '', contact_info: '' });
   const [orders, setOrders] = useState([]);
   const [materials, setMaterials] = useState([]);
   const [showAddMaterialModal, setShowAddMaterialModal] = useState(false);
@@ -176,6 +178,32 @@ export default function SupplierDashboard() {
     localStorage.removeItem('token');
     localStorage.removeItem('userRole');
     navigate('/login');
+  };
+
+  const handleEditProfileInit = () => {
+    setProfileFormData({
+      full_name: user?.name || '',
+      contact_info: user?.contact_info || user?.phone || '',
+      address: user?.address || ''
+    });
+    setIsEditingProfile(true);
+  };
+
+  const handleSaveProfile = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await axios.put('http://localhost:5000/api/suppliers/update-profile', profileFormData, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const updatedUser = { ...user, ...res.data.user };
+      // Sync React state and localStorage silently 
+      login(updatedUser, token);
+      setIsEditingProfile(false);
+      alert('Profile updated successfully!');
+    } catch (err) {
+      console.error('Error saving profile:', err);
+      alert(err.response?.data?.message || 'Failed to update profile');
+    }
   };
 
   // --- DERIVE STATS FROM REAL DATA ---
@@ -688,9 +716,31 @@ export default function SupplierDashboard() {
             </div>
             <div style={{textAlign: 'center', padding: '20px 0'}}>
               <div style={{width: '80px', height: '80px', borderRadius: '50%', backgroundColor: '#f59e0b', display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'white', fontSize: '32px', fontWeight: '700', margin: '0 auto 15px'}}>{user?.name?.substring(0, 2).toUpperCase() || 'SU'}</div>
-              <h2 style={{margin: '0 0 5px 0'}}>{user?.name || 'Supplier User'}</h2>
-              <p style={{margin: 0, color: '#6b7280', fontSize: '14px'}}>{user?.email || 'ravindusasanka808@gmail.com'}</p>
-              <div style={{marginTop: '20px', display: 'inline-block', backgroundColor: '#fef3c7', color: '#92400e', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '600'}}>Verified Supplier</div>
+              
+              {!isEditingProfile ? (
+                 <>
+                  <h2 style={{margin: '0 0 5px 0'}}>{user?.name || 'Supplier User'}</h2>
+                  <p style={{margin: 0, color: '#6b7280', fontSize: '14px'}}>{user?.email || 'supplier@example.com'}</p>
+                  <p style={{ margin: '5px 0 0 0', color: '#6b7280', fontSize: '14px' }}>Phone: {user?.phone || user?.contact_info || 'No phone provided'}</p>
+                  <p style={{ margin: '5px 0 0 0', color: '#6b7280', fontSize: '14px' }}>Address: {user?.address || 'No address provided'}</p>
+                  <div style={{marginTop: '20px', display: 'inline-block', backgroundColor: '#fef3c7', color: '#92400e', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '600', cursor: 'pointer'}} onClick={handleEditProfileInit}>Edit Account</div>
+                 </>
+              ) : (
+                 <div style={{ textAlign: 'left', marginTop: '10px' }}>
+                  <div style={{ marginBottom: '10px' }}>
+                    <label style={{ display: 'block', fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Full Name</label>
+                    <input type="text" value={profileFormData.full_name} onChange={e => setProfileFormData({...profileFormData, full_name: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', boxSizing: 'border-box' }} />
+                  </div>
+                  <div style={{ marginBottom: '10px' }}>
+                    <label style={{ display: 'block', fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Contact Info</label>
+                    <input type="text" value={profileFormData.contact_info} onChange={e => setProfileFormData({...profileFormData, contact_info: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', boxSizing: 'border-box' }} />
+                  </div>
+                  <div style={{ marginBottom: '10px' }}>
+                    <label style={{ display: 'block', fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Address</label>
+                    <input type="text" value={profileFormData.address} onChange={e => setProfileFormData({...profileFormData, address: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', boxSizing: 'border-box' }} />
+                  </div>
+                </div>
+              )}
             </div>
             <div style={{borderTop: '1px solid #e5e7eb', paddingTop: '20px', marginTop: '10px'}}>
               <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '14px'}}>
@@ -702,7 +752,14 @@ export default function SupplierDashboard() {
                 <span style={{fontWeight: '600', color: '#10b981'}}>Approved</span>
               </div>
             </div>
-            <button style={{...styles.updateBtn, width: '100%', marginTop: '30px'}} onClick={() => setShowProfileModal(false)}>Close</button>
+            {isEditingProfile ? (
+              <div style={{ display: 'flex', gap: '10px', marginTop: '30px' }}>
+                <button style={{ ...styles.updateBtn, flex: 1, backgroundColor: '#6b7280' }} onClick={() => setIsEditingProfile(false)}>Cancel</button>
+                <button style={{ ...styles.updateBtn, flex: 1 }} onClick={handleSaveProfile}>Save</button>
+              </div>
+            ) : (
+              <button style={{...styles.updateBtn, width: '100%', marginTop: '30px'}} onClick={() => setShowProfileModal(false)}>Close</button>
+            )}
           </div>
         </div>
       )}

@@ -29,6 +29,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 const orderRoutes = require('./routes/orderRoutes');
 const reportRoutes = require('./routes/reportRoutes');
 const deliveryRoutes = require('./routes/deliveryRoutes');
+const customerRoutes = require('./routes/customerRoutes');
 
 // --- 2. DEFINE ROUTES ---
 
@@ -51,6 +52,7 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/owner-payments', ownerPaymentRoutes);
 app.use('/api/delivery', deliveryRoutes);
 app.use('/api/returns', returnRoutes);
+app.use('/api/customers', customerRoutes);
 
 // --- ADMIN ROUTES (Supplier Requests) ---
 app.get('/api/admin/requests', getPendingSuppliers); // Fetch list

@@ -74,3 +74,4 @@ backend/*verify*.js
 backend/*trigger*.js
 
 backend/public/uploads/
+backend/database/archive/

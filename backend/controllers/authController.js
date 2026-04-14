@@ -34,7 +34,7 @@ const registerUser = async (req, res) => {
         // C. Insert into USERS table
         // We set is_verified to FALSE initially
         const newUser = await pool.query(
-            'INSERT INTO users (name, email, password, role, phone, address, is_verified) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+            'INSERT INTO users (name, email, password, role, phone, address, is_verified) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, name, email, role, phone, address, is_verified',
             [name, email, hashedPassword, role, phone, address, false]
         );
         
@@ -42,7 +42,7 @@ const registerUser = async (req, res) => {
 
         // D. Insert into ROLE-SPECIFIC Tables
         if (role === 'customer') {
-            await pool.query('INSERT INTO customers (user_id, address) VALUES ($1, $2)', [userId, address]);
+            await pool.query('INSERT INTO customers (user_id, address, name, email, phone) VALUES ($1, $2, $3, $4, $5)', [userId, address, name, email, phone]);
         } 
         else if (role === 'supplier') {
             // Includes Name, Description, and Status='Pending'
@@ -101,7 +101,7 @@ const loginUser = async (req, res) => {
 
     try {
         // A. Find User
-        const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+        const result = await pool.query('SELECT id, name, email, password, role, phone, address, is_verified FROM users WHERE email = $1', [email]);
         if (result.rows.length === 0) return res.status(400).json({ message: 'Invalid Credentials' });
 
         const user = result.rows[0];
@@ -131,7 +131,7 @@ const loginUser = async (req, res) => {
         res.json({
             message: 'Login Successful',
             token,
-            user: { id: user.id, name: user.name, email: user.email, role: user.role }
+            user: { id: user.id, name: user.name, email: user.email, role: user.role, phone: user.phone, address: user.address }
         });
 
     } catch (error) {

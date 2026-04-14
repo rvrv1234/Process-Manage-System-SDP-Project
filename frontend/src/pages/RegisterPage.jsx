@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
+import '../styles/Auth.css';
 
 export default function RegisterPage() {
   // 1. STATE MANAGEMENT
@@ -38,124 +39,122 @@ export default function RegisterPage() {
     }
   };
 
-  // 3. STYLES (Glassmorphism)
-  const glassStyle = {
-    background: 'rgba(255, 255, 255, 0.1)',
-    backdropFilter: 'blur(10px)',
-    borderRadius: '16px',
-    border: '1px solid rgba(255, 255, 255, 0.3)',
-    padding: '40px',
-    width: '400px',
-    boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
-    textAlign: 'center',
-    color: 'white'
-  };
-
-  const inputStyle = {
-    background: 'rgba(255, 255, 255, 0.9)',
-    border: '1px solid rgba(0, 0, 0, 0.2)',
-    color: '#000',
-    borderRadius: '5px',
-    padding: '12px',
-    marginBottom: '15px',
-    width: '100%',
-    boxSizing: 'border-box'
-  };
-
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', padding: '20px' }}>
-      <div style={glassStyle}>
+    <div className="auth-page">
+      <div className="auth-card" style={{ maxWidth: '500px' }}>
         
         {/* --- VIEW 1: SUCCESS MESSAGE (After Registering) --- */}
         {isRegistered ? (
-          <div>
-            <h2 style={{ color: '#4facfe', marginBottom: '20px' }}>📧 Check Your Email</h2>
-            <p style={{ fontSize: '1.1rem', marginBottom: '20px' }}>
+          <div className="auth-success">
+            <div className="auth-success-icon">📧</div>
+            <h2>Check Your Email</h2>
+            <p>
               We have sent a verification link to <strong>{formData.email}</strong>.
             </p>
-            <p style={{ opacity: 0.8, marginBottom: '30px' }}>
+            <p style={{ opacity: 0.8, fontSize: '0.875rem', marginTop: '1rem' }}>
               You cannot log in until you click that link.
             </p>
             
-            <p style={{ marginTop: '20px' }}>
-                <Link to="/" style={{ color: 'white', textDecoration: 'underline' }}>
+            <div className="auth-link-container">
+                <Link to="/" className="auth-link">
                     Go to Login Page
                 </Link>
-            </p>
+            </div>
           </div>
         ) : (
           /* --- VIEW 2: REGISTER FORM (Normal) --- */
           <>
-            <h2 style={{ marginBottom: '25px', fontWeight: '300' }}>Join with Hasal Products!</h2>
+            <header className="auth-header">
+              <h1>Join Hasal Products</h1>
+              <p>Create an account to get started</p>
+            </header>
             
-            <form onSubmit={handleSubmit}>
-              <input name="name" type="text" placeholder="Full Name" onChange={handleChange} required style={inputStyle} />
-              <input name="email" type="email" placeholder="Email Address" onChange={handleChange} required style={inputStyle} />
-              <input name="phone" type="tel" placeholder="Phone Number" onChange={handleChange} required style={inputStyle} />
-              <input name="address" type="text" placeholder="Address" onChange={handleChange} required style={inputStyle} />
+            <form onSubmit={handleSubmit} className="auth-form">
+              <div className="auth-form-group">
+                <label className="auth-label">Full Name</label>
+                <input name="name" type="text" placeholder="John Doe" onChange={handleChange} required className="auth-input" />
+              </div>
+
+              <div className="auth-form-group">
+                <label className="auth-label">Email Address</label>
+                <input name="email" type="email" placeholder="john@example.com" onChange={handleChange} required className="auth-input" />
+              </div>
+
+              <div className="auth-form-group">
+                <label className="auth-label">Phone Number</label>
+                <input name="phone" type="tel" placeholder="+94 77 123 4567" onChange={handleChange} required className="auth-input" />
+              </div>
+
+              <div className="auth-form-group">
+                <label className="auth-label">Address</label>
+                <input name="address" type="text" placeholder="No 123, Galle Road, Colombo" onChange={handleChange} required className="auth-input" />
+              </div>
               
+              <div className="auth-form-group">
+                <label className="auth-label">Select Role</label>
+                <select 
+                  name="role" 
+                  value={formData.role} 
+                  onChange={handleChange} 
+                  className="auth-select"
+                >
+                  <option value="customer">Customer</option>
+                  <option value="supplier">Supplier</option>
+                </select>
+              </div>
+
               {/* --- CONDITIONAL FIELDS FOR SUPPLIER --- */}
               {formData.role === 'supplier' && (
                 <>
-                  <input 
-                    name="company_name" 
-                    type="text" 
-                    placeholder="Company Name" 
-                    onChange={handleChange} 
-                    required 
-                    style={inputStyle} 
-                  />
-                  <textarea 
-                    name="description" 
-                    placeholder="Describe your business (e.g., We sell organic cinnamon...)" 
-                    onChange={handleChange} 
-                    required 
-                    style={{ ...inputStyle, height: '80px', resize: 'none', fontFamily: 'inherit' }} 
-                  />
+                  <div className="auth-form-group">
+                    <label className="auth-label">Company Name</label>
+                    <input 
+                      name="company_name" 
+                      type="text" 
+                      placeholder="Hasal Spices Pvt Ltd" 
+                      onChange={handleChange} 
+                      required 
+                      className="auth-input" 
+                    />
+                  </div>
+                  <div className="auth-form-group">
+                    <label className="auth-label">Business Description</label>
+                    <textarea 
+                      name="description" 
+                      placeholder="Describe your business (e.g., We sell organic cinnamon...)" 
+                      onChange={handleChange} 
+                      required 
+                      className="auth-textarea"
+                      style={{ height: '80px', resize: 'none' }}
+                    />
+                  </div>
                 </>
               )}
 
-              <input name="password" type="password" placeholder="Password" onChange={handleChange} required style={inputStyle} />
+              <div className="auth-form-group">
+                <label className="auth-label">Password</label>
+                <input name="password" type="password" placeholder="••••••••" onChange={handleChange} required className="auth-input" />
+              </div>
 
-              <label style={{display:'block', textAlign:'left', fontSize:'12px', marginBottom:'5px', opacity:0.8}}>Select Role</label>
-              <select 
-                name="role" 
-                value={formData.role} 
-                onChange={handleChange} 
-                style={{ ...inputStyle, background: '#1a1a2e', cursor: 'pointer' }} // Dark bg fix
-              >
-                <option value="customer">Customer</option>
-                <option value="supplier">Supplier</option>
-              </select>
-
-              {error && <p style={{ color: '#ff6b6b', marginBottom: '10px' }}>{error}</p>}
+              {error && <p className="auth-error">{error}</p>}
 
               <button 
                 type="submit" 
-                style={{ 
-                  width: '100%', 
-                  padding: '12px', 
-                  // Change color slightly for Supplier to indicate a "Request" action
-                  background: formData.role === 'supplier' 
-                    ? 'linear-gradient(45deg, #FF512F 0%, #DD2476 100%)' // Red/Pink for Request
-                    : 'linear-gradient(45deg, #11998e 0%, #38ef7d 100%)', // Green for Register
-                  border: 'none', 
-                  borderRadius: '5px', 
-                  color: 'white', 
-                  fontWeight: 'bold', 
-                  cursor: 'pointer' 
+                className="auth-button"
+                style={{
+                  backgroundColor: formData.role === 'supplier' ? '#065f46' : '#059669'
                 }}
               >
-                {formData.role === 'supplier' ? 'Send Request' : 'Register'}
+                {formData.role === 'supplier' ? 'Send Application' : 'Register Now'}
               </button>
             </form>
             
-            <p style={{ marginTop: '20px', fontSize: '14px' }}>
-              Already have an account? <Link to="/" style={{ color: '#4facfe' }}>Sign In</Link>
+            <p className="auth-link-container">
+              Already have an account? <Link to="/" className="auth-link">Sign In</Link>
             </p>
           </>
         )}
       </div>
     </div>
   );
-}
+}

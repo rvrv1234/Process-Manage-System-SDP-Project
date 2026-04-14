@@ -200,6 +200,52 @@ const updateReturnStatus = async (req, res) => {
     }
 };
 
+// 8. Update Profile (Supplier)
+const updateProfile = async (req, res) => {
+    const full_name = req.body.full_name || req.body.name;
+    const contact_info = req.body.contact_info || req.body.phone;
+    const address = req.body.address;
+    const userId = req.user.id; // from auth middleware
+
+    const client = await pool.connect();
+
+    try {
+        await client.query('BEGIN');
+        
+        const userResult = await client.query(
+            'UPDATE users SET full_name = $1 WHERE id = $2 RETURNING id, full_name as name, email, role',
+            [full_name, userId]
+        );
+
+        if (userResult.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Update suppliers table explicitly
+        await client.query(
+            'UPDATE suppliers SET address = $1, contact_info = $2 WHERE user_id = $3',
+            [address, contact_info, userId]
+        );
+        
+        await client.query('COMMIT');
+
+        const updatedUser = {
+            ...userResult.rows[0],
+            address,
+            contact_info
+        };
+
+        res.json({ message: 'Profile updated successfully', user: updatedUser });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('Error updating supplier profile:', err);
+        res.status(500).json({ message: 'Server error' });
+    } finally {
+        client.release();
+    }
+};
+
 module.exports = { 
     getPendingSuppliers, 
     updateSupplierStatus, 
@@ -207,5 +253,6 @@ module.exports = {
     updatePOStatus,
     createReturnRequest,
     getReturnRequestsBySupplier,
-    updateReturnStatus
+    updateReturnStatus,
+    updateProfile
 };

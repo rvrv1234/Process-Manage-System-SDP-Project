@@ -1,11 +1,12 @@
 const express = require('express');
 const router = express.Router();
-const { getPendingSuppliers, updateSupplierStatus, getApprovedSuppliers, updatePOStatus } = require('../controllers/supplierController');
-const { 
-    getSupplierMaterials, 
-    placePurchaseOrder, 
-    getAllPurchaseOrders, 
-    updatePurchaseOrderStatus, 
+const { getPendingSuppliers, updateSupplierStatus, getApprovedSuppliers, updatePOStatus, updateProfile } = require('../controllers/supplierController');
+const { verifyToken } = require('../middleware/authMiddleware');
+const {
+    getSupplierMaterials,
+    placePurchaseOrder,
+    getAllPurchaseOrders,
+    updatePurchaseOrderStatus,
     getSupplierPurchaseOrders,
     addSupplierMaterial,
     getMyMaterials,
@@ -41,5 +42,8 @@ router.post('/purchase', placePurchaseOrder);
 router.get('/my-materials/:userId', getMyMaterials);
 router.post('/materials', addSupplierMaterial);
 router.delete('/materials/:id', deleteSupplierMaterial);
+
+// Update Profile 
+router.put('/update-profile', verifyToken, updateProfile);
 
 module.exports = router;

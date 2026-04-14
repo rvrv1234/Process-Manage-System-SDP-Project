@@ -1,0 +1,229 @@
+/* frontend/src/styles/Auth.css */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --primary-emerald: #059669;
+  --secondary-emerald: #10B981;
+  --bg-off-white: #F9FAFB;
+  --text-dark-gray: #1F2937;
+  --input-border: #D1D5DB;
+  --error-red: #EF4444;
+}
+
+.auth-page {
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', sans-serif;
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  /* REMOVED the solid gradient so we can see through to the ::before layer */
+  background: transparent;
+  position: relative;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.auth-page::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  /* The Background Image */
+  background-image: url('/auth-bg.jpg');
+  background-size: cover;
+  background-position: center;
+
+  /* The Blur & Tint */
+  filter: blur(8px);
+  transform: scale(1.1);
+  background-color: rgba(5, 150, 105, 0.4);
+  background-blend-mode: overlay;
+
+  /* This stays behind everything else */
+  z-index: -1;
+}
+
+.auth-card {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  /* Optional: adds a glass look to the card */
+  border-radius: 1.5rem;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+  padding: 2.5rem;
+  width: 100%;
+  max-width: 450px;
+  position: relative;
+  z-index: 10;
+  /* Ensures card stays on top of everything */
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.auth-header {
+  margin-bottom: 2rem;
+}
+
+.auth-header h1 {
+  font-size: 1.875rem;
+  font-weight: 700;
+  color: var(--primary-emerald);
+  margin: 0;
+  letter-spacing: -0.025em;
+}
+
+.auth-header p {
+  color: #6B7280;
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.auth-form-group {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  gap: 0.375rem;
+}
+
+.auth-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #4B5563;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.auth-input,
+.auth-select,
+.auth-textarea {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--input-border);
+  background-color: #ffffff;
+  color: var(--text-dark-gray);
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.auth-input:focus,
+.auth-select:focus,
+.auth-textarea:focus {
+  outline: none;
+  border: 2px solid var(--primary-emerald);
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.1);
+}
+
+.auth-input::placeholder {
+  color: #9CA3AF;
+}
+
+.auth-error {
+  color: var(--error-red);
+  font-size: 0.8125rem;
+  margin: 0;
+  text-align: left;
+}
+
+.auth-button {
+  background-color: var(--primary-emerald);
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.875rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+  margin-top: 0.5rem;
+}
+
+.auth-button:hover:not(:disabled) {
+  background-color: #047857;
+}
+
+.auth-button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.auth-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.auth-link-container {
+  margin-top: 1.5rem;
+  font-size: 0.875rem;
+  color: #6B7280;
+}
+
+.auth-link {
+  color: var(--primary-emerald);
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.1s ease;
+}
+
+.auth-link:hover {
+  color: #047857;
+  text-decoration: underline;
+}
+
+.auth-forgot-link {
+  display: block;
+  text-align: right;
+  font-size: 0.75rem;
+  color: #6B7280;
+  text-decoration: none;
+}
+
+.auth-forgot-link:hover {
+  color: var(--primary-emerald);
+}
+
+/* Success View for Registration */
+.auth-success {
+  text-align: center;
+}
+
+.auth-success-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.auth-success h2 {
+  color: var(--primary-emerald);
+  margin-bottom: 1rem;
+}
+
+.auth-success p {
+  line-height: 1.6;
+  color: #4B5563;
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+  .auth-card {
+    padding: 1.5rem;
+    margin: 1rem;
+  }
+}
