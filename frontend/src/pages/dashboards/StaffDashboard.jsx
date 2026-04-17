@@ -31,8 +31,9 @@ export default function StaffDashboard() {
   // --- API CALLS ---
   const fetchProducts = async () => {
     try {
+        const token = localStorage.getItem('token');
         // Fetching products for the inventory table and dropdown
-        const res = await axios.get('http://localhost:5000/api/products');
+        const res = await axios.get('http://localhost:5000/api/products', { headers: { Authorization: `Bearer ${token}` } });
         setApiProducts(res.data);
     } catch (err) {
         console.error('Failed to fetch products:', err);
@@ -41,7 +42,8 @@ export default function StaffDashboard() {
 
   const fetchBatches = async () => {
     try {
-        const res = await axios.get('http://localhost:5000/api/production/grouped-orders');
+        const token = localStorage.getItem('token');
+        const res = await axios.get('http://localhost:5000/api/production/grouped-orders', { headers: { Authorization: `Bearer ${token}` } });
         setBatches(res.data);
     } catch (err) {
         console.error('Failed to fetch production batches:', err);
@@ -66,7 +68,8 @@ export default function StaffDashboard() {
 
   const handleUpdateBatchStatus = async (orderId, newStatus) => {
     try {
-        await axios.put(`http://localhost:5000/api/production/${orderId}/status`, { status: newStatus });
+        const token = localStorage.getItem('token');
+        await axios.put(`http://localhost:5000/api/production/${orderId}/status`, { status: newStatus }, { headers: { Authorization: `Bearer ${token}` } });
         fetchBatches();
     } catch (err) {
         console.error('Failed to update batch status:', err);
@@ -82,10 +85,11 @@ export default function StaffDashboard() {
     }
 
     try {
+        const token = localStorage.getItem('token');
         await axios.put('http://localhost:5000/api/staff/catalog', {
             productId: selectedProduct,
             packets: packetCounts
-        });
+        }, { headers: { Authorization: `Bearer ${token}` } });
 
         alert("Catalog updated successfully!");
         setShowUpdateModal(false);
@@ -109,6 +113,33 @@ export default function StaffDashboard() {
     if (level > 0) return { label: 'Low Stock', color: '#eab308' };
     return { label: 'Out of Stock', color: '#ef4444' };
   };
+
+  const formatDate = (dateValue) => {
+    if (!dateValue) return "N/A";
+    const date = new Date(dateValue);
+    if (isNaN(date.getTime())) return "N/A";
+    return date.toLocaleDateString();
+  };
+
+  const getSelectedProductRemaining = (weight) => {
+      const selected = (apiProducts || []).find(p => p.product_id === Number(selectedProduct));
+      return selected?.packets?.find(pkg => pkg.weight === weight)?.quantity || 0;
+  };
+
+  const safeBatches = Array.isArray(batches) ? batches : [];
+
+  if (!user) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f3f4f6', fontFamily: '"Inter", sans-serif' }}>
+        <div style={{ fontSize: '18px', color: '#6b7280' }}>Loading user profile...</div>
+      </div>
+    );
+  }
+
+  // Adding Role Guard as requested
+  if (user.role !== 'owner' && user.role !== 'staff' && user.role !== 'inventory_manager' && user.role !== 'production_manager') {
+     return <div style={{ padding: '40px', color: 'red', fontSize: '20px', textAlign: 'center' }}>Access Denied</div>;
+  }
 
   // --- STYLES ---
   const styles = {
@@ -282,15 +313,15 @@ export default function StaffDashboard() {
             <div style={styles.statsGrid}>
               <div style={styles.statCard}>
                 <div style={{display:'flex',justifyContent:'space-between'}}><div style={styles.iconBox('#f59e0b')}><MdFactory /></div><span style={{color:'#10b981',fontWeight:'600'}}>↑</span></div>
-                <div><div style={{fontSize:'32px',fontWeight:'700'}}>{batches.filter(b => b.status === 'To Produce' || b.status === 'In Process').length}</div><div style={{fontSize:'14px',color:'#6b7280'}}>Active Batches</div></div>
+                <div><div style={{fontSize:'32px',fontWeight:'700'}}>{batches?.filter(b => b.status === 'To Produce' || b.status === 'In Process').length || 0}</div><div style={{fontSize:'14px',color:'#6b7280'}}>Active Batches</div></div>
               </div>
               <div style={styles.statCard}>
                 <div style={{display:'flex',justifyContent:'space-between'}}><div style={styles.iconBox('#f59e0b')}><MdAccessTime /></div><span style={{color:'white',fontWeight:'600'}}></span></div>
-                <div><div style={{fontSize:'32px',fontWeight:'700'}}>{batches.filter(b => b.status === 'In Process').length}</div><div style={{fontSize:'14px',color:'#6b7280'}}>In Production</div></div>
+                <div><div style={{fontSize:'32px',fontWeight:'700'}}>{batches?.filter(b => b.status === 'In Process').length || 0}</div><div style={{fontSize:'14px',color:'#6b7280'}}>In Production</div></div>
               </div>
               <div style={styles.statCard}>
                 <div style={{display:'flex',justifyContent:'space-between'}}><div style={styles.iconBox('#10b981')}><MdTrendingUp /></div><span style={{color:'#10b981',fontWeight:'600'}}>↑</span></div>
-                <div><div style={{fontSize:'32px',fontWeight:'700'}}>{batches.filter(b => b.status === 'Completed').length}</div><div style={{fontSize:'14px',color:'#6b7280'}}>Completed Total</div></div>
+                <div><div style={{fontSize:'32px',fontWeight:'700'}}>{batches?.filter(b => b.status === 'Completed').length || 0}</div><div style={{fontSize:'14px',color:'#6b7280'}}>Completed Total</div></div>
               </div>
             </div>
 
@@ -300,12 +331,12 @@ export default function StaffDashboard() {
               <p style={{fontSize:'14px', color:'#6b7280'}}>Your assigned production batches</p>
             </div>
 
-            {batches.filter(b => b.status !== 'Completed').map((item, idx) => (
+            {batches?.filter(b => b.status !== 'Completed')?.map((item, idx) => (
               <div key={item.order_id} style={styles.queueItem}>
                 <div>
                   <h4 style={{margin:'0 0 5px 0', fontSize:'16px', color:'#374151'}}>Order #{item.order_id} - {item.customer_name}</h4>
                   <div style={{fontSize:'13px', color:'#6b7280'}}>Items: {item.merged_items}</div>
-                  <div style={{fontSize:'11px', color:'#9ca3af'}}>Due: {new Date(item.due_date).toLocaleDateString()}</div>
+                  <div style={{fontSize:'11px', color:'#9ca3af'}}>Due: {formatDate(item.due_date)}</div>
                 </div>
                 <div style={{textAlign:'right'}}>
                   <span style={styles.statusBadge(item.status)}>{item.status}</span>
@@ -457,21 +488,24 @@ export default function StaffDashboard() {
             {/* Production Stats */}
             <div style={{...styles.statsGrid, gridTemplateColumns: 'repeat(4, 1fr)'}}>
               {[
-                {l:'Total Batches', v:batches.length, i:<MdFactory />, c:'#f59e0b'},
-                {l:'To Produce', v:batches.filter(b => b.status === 'To Produce').length, i:<MdAccessTime />, c:'#eab308'},
-                {l:'In Process', v:batches.filter(b => b.status === 'In Process').length, i:<MdArrowForward />, c:'#f97316'},
-                {l:'Completed', v:batches.filter(b => b.status === 'Completed' || b.status === 'Ready for Delivery').length, i:<MdCheckCircle />, c:'#10b981'}
+                {l:'Total Batches', v:safeBatches.length, i:<MdFactory />, c:'#f59e0b'},
+                {l:'To Produce', v:safeBatches.filter(b => b?.status === 'To Produce').length, i:<MdAccessTime />, c:'#eab308'},
+                {l:'In Process', v:safeBatches.filter(b => b?.status === 'In Process').length, i:<MdArrowForward />, c:'#f97316'},
+                {l:'Completed', v:safeBatches.filter(b => b?.status === 'Completed' || b?.status === 'Ready for Delivery').length, i:<MdCheckCircle />, c:'#10b981'}
               ].map((s,i) => (
-                 <div key={i} style={styles.invStatCard}><div style={{...styles.iconBox(s.c),marginBottom:0,borderRadius:'10px',width:'45px',height:'45px',fontSize:'22px'}}>{s.i}</div><div><div style={{fontSize:'12px',color:'#6b7280'}}>{s.l}</div><div style={{fontSize:'20px',fontWeight:'700'}}>{s.v}</div></div></div>
+                 <div key={i} style={styles.invStatCard(false)}><div style={{...styles.iconBox(s.c),marginBottom:0,borderRadius:'10px',width:'45px',height:'45px',fontSize:'22px'}}>{s.i}</div><div><div style={{fontSize:'12px',color:'#6b7280'}}>{s.l}</div><div style={{fontSize:'20px',fontWeight:'700'}}>{s.v}</div></div></div>
               ))}
             </div>
 
             {/* Kanban Board */}
+            {safeBatches.length === 0 ? (
+              <div style={{padding: '20px', color: '#6b7280'}}>No production records found</div>
+            ) : (
             <div style={styles.prodGrid}>
               {/* Column 1: To Produce */}
               <div style={styles.prodCol('#fefce8')}>
-                <div style={styles.prodColHeader('#a16207')}><div style={{display:'flex',alignItems:'center',gap:'8px'}}><MdAccessTime /> To Produce</div><span style={{backgroundColor:'#a16207',color:'white',padding:'2px 8px',borderRadius:'12px',fontSize:'12px'}}>{batches.filter(b => b.status === 'To Produce').length}</span></div>
-                {batches.filter(b => b.status === 'To Produce').map(batch => (
+                <div style={styles.prodColHeader('#a16207')}><div style={{display:'flex',alignItems:'center',gap:'8px'}}><MdAccessTime /> To Produce</div><span style={{backgroundColor:'#a16207',color:'white',padding:'2px 8px',borderRadius:'12px',fontSize:'12px'}}>{safeBatches.filter(b => b?.status === 'To Produce').length}</span></div>
+                {safeBatches.filter(b => b?.status === 'To Produce').map(batch => (
                   <div key={batch.order_id} style={styles.prodCard}>
                     <div style={{display:'flex',justifyContent:'space-between',marginBottom:'10px'}}>
                       <h4 style={{margin:0}}>
@@ -482,7 +516,7 @@ export default function StaffDashboard() {
                     <div style={{fontSize:'13px',color:'#6b7280',marginBottom:'15px', lineHeight: '1.4'}}>
                       {batch.merged_items}
                     </div>
-                    <div style={{display:'flex',justifyContent:'space-between',fontSize:'12px',color:'#6b7280',marginBottom:'5px'}}><span>Due Date:</span><span>{new Date(batch.due_date).toLocaleDateString()}</span></div>
+                    <div style={{display:'flex',justifyContent:'space-between',fontSize:'12px',color:'#6b7280',marginBottom:'5px'}}><span>Due Date:</span><span>{formatDate(batch.due_date)}</span></div>
                     <div style={{display:'flex',justifyContent:'space-between',fontSize:'12px',color:'#6b7280'}}><span>Assigned To:</span><span>{batch.assigned_team}</span></div>
                     <button onClick={() => handleUpdateBatchStatus(batch.order_id, 'In Process')} style={styles.prodBtn('#eab308','white')}><MdArrowForward /> Start Production</button>
                   </div>
@@ -491,8 +525,8 @@ export default function StaffDashboard() {
 
               {/* Column 2: In Process */}
               <div style={styles.prodCol('#fff7ed')}>
-                <div style={styles.prodColHeader('#c2410c')}><div style={{display:'flex',alignItems:'center',gap:'8px'}}><MdArrowForward /> In Process</div><span style={{backgroundColor:'#c2410c',color:'white',padding:'2px 8px',borderRadius:'12px',fontSize:'12px'}}>{batches.filter(b => b.status === 'In Process').length}</span></div>
-                {batches.filter(b => b.status === 'In Process').map(batch => (
+                <div style={styles.prodColHeader('#c2410c')}><div style={{display:'flex',alignItems:'center',gap:'8px'}}><MdArrowForward /> In Process</div><span style={{backgroundColor:'#c2410c',color:'white',padding:'2px 8px',borderRadius:'12px',fontSize:'12px'}}>{safeBatches.filter(b => b?.status === 'In Process').length}</span></div>
+                {safeBatches.filter(b => b?.status === 'In Process').map(batch => (
                   <div key={batch.order_id} style={styles.prodCard}>
                     <div style={{display:'flex',justifyContent:'space-between',marginBottom:'10px'}}>
                       <h4 style={{margin:0}}>
@@ -503,8 +537,8 @@ export default function StaffDashboard() {
                     <div style={{fontSize:'13px',color:'#6b7280',marginBottom:'15px', lineHeight: '1.4'}}>
                       {batch.merged_items}
                     </div>
-                    <div style={{display:'flex',justifyContent:'space-between',fontSize:'12px',color:'#6b7280',marginBottom:'5px'}}><span>Start Date:</span><span>{batch.start_date ? new Date(batch.start_date).toLocaleDateString() : 'Today'}</span></div>
-                    <div style={{display:'flex',justifyContent:'space-between',fontSize:'12px',color:'#6b7280',marginBottom:'5px'}}><span>Due Date:</span><span>{new Date(batch.due_date).toLocaleDateString()}</span></div>
+                    <div style={{display:'flex',justifyContent:'space-between',fontSize:'12px',color:'#6b7280',marginBottom:'5px'}}><span>Start Date:</span><span>{batch.start_date ? formatDate(batch.start_date) : 'Today'}</span></div>
+                    <div style={{display:'flex',justifyContent:'space-between',fontSize:'12px',color:'#6b7280',marginBottom:'5px'}}><span>Due Date:</span><span>{formatDate(batch.due_date)}</span></div>
                     <button onClick={() => handleUpdateBatchStatus(batch.order_id, 'Completed')} style={styles.prodBtn('#10b981','white')}><MdCheckCircle /> Mark Complete</button>
                   </div>
                 ))}
@@ -512,8 +546,8 @@ export default function StaffDashboard() {
 
               {/* Column 3: Completed */}
               <div style={styles.prodCol('#f0fdf4')}>
-                <div style={styles.prodColHeader('#15803d')}><div style={{display:'flex',alignItems:'center',gap:'8px'}}><MdCheckCircle /> Completed</div><span style={{backgroundColor:'#15803d',color:'white',padding:'2px 8px',borderRadius:'12px',fontSize:'12px'}}>{batches.filter(b => b.status === 'Completed' || b.status === 'Ready for Delivery').length}</span></div>
-                {batches.filter(b => b.status === 'Completed' || b.status === 'Ready for Delivery').map(batch => (
+                <div style={styles.prodColHeader('#15803d')}><div style={{display:'flex',alignItems:'center',gap:'8px'}}><MdCheckCircle /> Completed</div><span style={{backgroundColor:'#15803d',color:'white',padding:'2px 8px',borderRadius:'12px',fontSize:'12px'}}>{safeBatches.filter(b => b?.status === 'Completed' || b?.status === 'Ready for Delivery').length}</span></div>
+                {safeBatches.filter(b => b?.status === 'Completed' || b?.status === 'Ready for Delivery').map(batch => (
                   <div key={batch.order_id} style={styles.prodCard}>
                     <div style={{display:'flex',justifyContent:'space-between',marginBottom:'10px'}}>
                       <h4 style={{margin:0}}>
@@ -524,12 +558,13 @@ export default function StaffDashboard() {
                     <div style={{fontSize:'13px',color:'#6b7280',marginBottom:'15px', lineHeight: '1.4'}}>
                       {batch.merged_items}
                     </div>
-                    <div style={{display:'flex',justifyContent:'space-between',fontSize:'12px',color:'#6b7280',marginBottom:'5px'}}><span>Completed:</span><span>{batch.completed_date ? new Date(batch.completed_date).toLocaleDateString() : 'Recently'}</span></div>
+                    <div style={{display:'flex',justifyContent:'space-between',fontSize:'12px',color:'#6b7280',marginBottom:'5px'}}><span>Completed:</span><span>{batch.completed_date ? formatDate(batch.completed_date) : 'Recently'}</span></div>
                     <button style={{...styles.prodBtn('#10b981','white'), opacity:0.8, cursor:'default'}}>Completed ✓</button>
                   </div>
                 ))}
               </div>
             </div>
+            )}
           </>
         )}
 
@@ -556,7 +591,7 @@ export default function StaffDashboard() {
             <div style={{textAlign: 'center', padding: '20px 0'}}>
               <div style={{width: '80px', height: '80px', borderRadius: '50%', backgroundColor: '#f59e0b', display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'white', fontSize: '32px', fontWeight: '700', margin: '0 auto 15px'}}>{user?.name?.substring(0, 2).toUpperCase() || 'ST'}</div>
               <h2 style={{margin: '0 0 5px 0'}}>{user?.name || 'Staff User'}</h2>
-              <p style={{margin: 0, color: '#6b7280', fontSize: '14px'}}>saman@gmail.com</p>
+              <p style={{margin: 0, color: '#6b7280', fontSize: '14px'}}>{user?.email || 'N/A'}</p>
               <div style={{marginTop: '20px', display: 'inline-block', backgroundColor: '#fef3c7', color: '#92400e', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '600'}}>Production Staff</div>
             </div>
             <div style={{borderTop: '1px solid #e5e7eb', paddingTop: '20px', marginTop: '10px'}}>
@@ -611,7 +646,7 @@ export default function StaffDashboard() {
                     <div style={styles.packetInputGroup}>
                         <div style={{display:'flex', justifyContent:'space-between', width:'100%', marginBottom:'5px'}}>
                             <span style={styles.weightBadge('#f59e0b')}>50g</span>
-                            <span style={{fontSize:'12px', color:'#6b7280'}}>Current Remaining: <strong>{apiProducts.find(p => p.product_id === Number(selectedProduct))?.packets?.find(pkg => pkg.weight === '50g')?.quantity || 0}</strong></span>
+                            <span style={{fontSize:'12px', color:'#6b7280'}}>Current Remaining: <strong>{getSelectedProductRemaining('50g')}</strong></span>
                         </div>
                         <div style={{display:'flex', alignItems:'center', gap:'10px', width:'100%'}}>
                           <input
@@ -630,7 +665,7 @@ export default function StaffDashboard() {
                     <div style={styles.packetInputGroup}>
                         <div style={{display:'flex', justifyContent:'space-between', width:'100%', marginBottom:'5px'}}>
                             <span style={styles.weightBadge('#10b981')}>100g</span>
-                            <span style={{fontSize:'12px', color:'#6b7280'}}>Current Remaining: <strong>{apiProducts.find(p => p.product_id === Number(selectedProduct))?.packets?.find(pkg => pkg.weight === '100g')?.quantity || 0}</strong></span>
+                            <span style={{fontSize:'12px', color:'#6b7280'}}>Current Remaining: <strong>{getSelectedProductRemaining('100g')}</strong></span>
                         </div>
                         <div style={{display:'flex', alignItems:'center', gap:'10px', width:'100%'}}>
                           <input
@@ -649,7 +684,7 @@ export default function StaffDashboard() {
                     <div style={styles.packetInputGroup}>
                         <div style={{display:'flex', justifyContent:'space-between', width:'100%', marginBottom:'5px'}}>
                             <span style={styles.weightBadge('#3b82f6')}>200g</span>
-                            <span style={{fontSize:'12px', color:'#6b7280'}}>Current Remaining: <strong>{apiProducts.find(p => p.product_id === Number(selectedProduct))?.packets?.find(pkg => pkg.weight === '200g')?.quantity || 0}</strong></span>
+                            <span style={{fontSize:'12px', color:'#6b7280'}}>Current Remaining: <strong>{getSelectedProductRemaining('200g')}</strong></span>
                         </div>
                         <div style={{display:'flex', alignItems:'center', gap:'10px', width:'100%'}}>
                           <input

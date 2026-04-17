@@ -12,4 +12,7 @@ router.get('/my-deliveries', verifyToken, isDelivery, deliveryController.getMyDe
 // Route to claim an available order
 router.patch('/claim/:orderId', verifyToken, isDelivery, deliveryController.claimOrder);
 
+// Route to complete a delivery
+router.patch('/complete/:deliveryId', verifyToken, isDelivery, deliveryController.completeDelivery);
+
 module.exports = router;

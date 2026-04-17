@@ -30,23 +30,29 @@ const updateBatchStatus = async (req, res) => {
 
         // Bypassing 'orders_status_check': Not needed anymore! The constraints have been globally updated to accept 'Ready for Delivery'.
         // Synchronizing explicitly per User Instruction: orders.status and production_batches BOTH get 'Ready for Delivery'
-        let orderStatus = status === 'Completed' ? 'Ready for Delivery' : 'PROCESSING';
-        await client.query("UPDATE orders SET status = $1 WHERE id = $2", [orderStatus, id]);
+        let orderStatus = status === 'Completed' ? 'READY FOR DELIVERY' : 'PROCESSING';
+        await client.query("UPDATE orders SET status = $1 WHERE order_id = $2", [orderStatus, id]);
 
         // Status Sync: Push 'Ready for Delivery' straight onto production_batches so Delivery Board locks it
         let batchStatus = status === 'Completed' ? 'Ready for Delivery' : status;
         let batchQuery = "UPDATE production_batches SET status = $1 WHERE order_id = $2 RETURNING *";
         if (status === 'Completed') {
             batchQuery = "UPDATE production_batches SET status = $1, completed_date = CURRENT_DATE WHERE order_id = $2 RETURNING *";
-            
-            // Generate a tracking hook into the distinct deliveries tables natively dropping 'Ready for Pickup'
-            await client.query("INSERT INTO deliveries (order_id, delivery_status) VALUES ($1, 'Ready for Pickup')", [id]);
         } else if (status === 'In Process') {
             batchQuery = "UPDATE production_batches SET status = $1, start_date = CURRENT_DATE WHERE order_id = $2 RETURNING *";
         }
         await client.query(batchQuery, [batchStatus, id]);
 
         await client.query('COMMIT');
+
+        // Separate delivery creation from the main transaction
+        if (status === 'Completed') {
+            try {
+                await pool.query("INSERT INTO deliveries (order_id, delivery_status) VALUES ($1, 'ASSIGNED')", [id]);
+            } catch (deliveryErr) {
+                console.error('Non-critical error creating delivery record:', deliveryErr.message);
+            }
+        }
 
         // Audit Log Fix: Ensure req.user.id exists securely before passing it.
         if (!req.user || !req.user.id) {

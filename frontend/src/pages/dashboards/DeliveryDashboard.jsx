@@ -54,6 +54,18 @@ export default function DeliveryDashboard() {
     }
   };
 
+  const handleCompleteDelivery = async (deliveryId) => {
+    try {
+      const token = localStorage.getItem('token');
+      await axios.patch(`http://localhost:5000/api/delivery/complete/${deliveryId}`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      fetchData();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to complete delivery');
+    }
+  };
+
   // Helper to extract city from address string
   const extractCity = (address) => {
     if (!address) return 'Unknown Location';
@@ -64,7 +76,7 @@ export default function DeliveryDashboard() {
     return address.split(',').pop().trim(); // Fallback to last segment
   };
 
-  const currentDelivery = myDeliveries.find(d => d.status === 'Picked Up') || null;
+  const currentDelivery = myDeliveries.find(d => d.status === 'PICKED_UP' || d.status === 'ASSIGNED') || null;
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -131,7 +143,7 @@ export default function DeliveryDashboard() {
     th: { textAlign: 'left', padding: '18px', backgroundColor: '#f3f4f6', fontSize: '14px', fontWeight: '600', color: '#4b5563', borderBottom: '1px solid #e5e7eb' },
     td: { padding: '18px', borderBottom: '1px solid #f3f4f6', fontSize: '14px', color: '#1f2937', verticalAlign: 'middle' },
     statusBadge: (status) => {
-      const colors = { 'In Transit': '#f97316', 'Ready for Pickup': '#eab308', 'Delivered': '#10b981' };
+      const colors = { 'PICKED_UP': '#f97316', 'ASSIGNED': '#eab308', 'DELIVERED': '#10b981', 'COMPLETED': '#10b981' };
       const bg = colors[status] || '#9ca3af';
       return { backgroundColor: bg, color: 'white', padding: '6px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' };
     },
@@ -231,8 +243,7 @@ export default function DeliveryDashboard() {
               </div>
 
               <div style={styles.dcActions}>
-                <button style={styles.primaryBtn}><MdLocalShipping /> Complete Delivery</button>
-                <button style={styles.outlineBtn}><MdMap /> View Route</button>
+                <button onClick={() => handleCompleteDelivery(currentDelivery.delivery_id)} style={styles.primaryBtn}><MdLocalShipping /> Complete Delivery</button>
               </div>
             </div>
             ) : (
@@ -280,7 +291,7 @@ export default function DeliveryDashboard() {
                             <span style={styles.statusBadge(o.status)}>{o.status}</span>
                         </td>
                         <td style={styles.td}>
-                            <button onClick={() => handleClaimOrder(o.delivery_id)} style={{...styles.primaryBtn, backgroundColor:'#10b981', padding:'8px 16px'}}><MdCheckCircle /> Accept Order</button>
+                            <button onClick={() => handleClaimOrder(o.id)} style={{...styles.primaryBtn, backgroundColor:'#10b981', padding:'8px 16px'}}><MdCheckCircle /> Accept Order</button>
                         </td>
                     </tr>
                   ))}
@@ -319,7 +330,7 @@ export default function DeliveryDashboard() {
                         <td style={styles.td}><div style={{fontSize:'13px', lineHeight:'1.4', maxWidth:'200px'}}>{d.items}</div></td>
                         <td style={styles.td}><span style={styles.statusBadge(d.status)}>{d.status}</span></td>
                         <td style={styles.td}>
-                            {d.status !== 'Delivered' ? (
+                            {d.status !== 'DELIVERED' && d.status !== 'COMPLETED' ? (
                                 <button style={{...styles.primaryBtn, backgroundColor:'#3b82f6', padding:'6px 12px'}}><MdLocalShipping /> Process</button>
                             ) : (
                                 <span style={{color:'#10b981', fontSize:'13px', fontWeight:'600'}}>Completed</span>

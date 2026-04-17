@@ -44,28 +44,28 @@ export default function Dashboard() {
   return (
     <div style={containerStyle}>
       {/* Top Bar for Logout */}
-      <div style={{ 
-        width: '90%', 
-        maxWidth: '1200px', 
-        display: 'flex', 
-        justifyContent: 'flex-end', 
-        marginBottom: '20px' 
+      <div style={{
+        width: '90%',
+        maxWidth: '1200px',
+        display: 'flex',
+        justifyContent: 'flex-end',
+        marginBottom: '20px'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-            <span style={{ fontSize: '14px', opacity: 0.8 }}>Logged in as: <strong>{user?.role}</strong></span>
-            <button 
-            onClick={() => { logout(); navigate('/'); }} 
+          <span style={{ fontSize: '14px', opacity: 0.8 }}>Logged in as: <strong>{user?.role}</strong></span>
+          <button
+            onClick={() => { logout(); navigate('/'); }}
             style={{
-                padding: '8px 20px',
-                background: 'rgba(255, 75, 75, 0.8)',
-                border: 'none',
-                borderRadius: '5px',
-                color: 'white',
-                cursor: 'pointer'
+              padding: '8px 20px',
+              background: 'rgba(255, 75, 75, 0.8)',
+              border: 'none',
+              borderRadius: '5px',
+              color: 'white',
+              cursor: 'pointer'
             }}
-            >
+          >
             Logout
-            </button>
+          </button>
         </div>
       </div>
 
