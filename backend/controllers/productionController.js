@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const { logAudit } = require('../utils/auditLogger');
+const { notifyUsersByRole } = require('../utils/notificationHelper');
 
 // 1. Get All Production Batches
 const getBatches = async (req, res) => {
@@ -52,6 +53,9 @@ const updateBatchStatus = async (req, res) => {
             } catch (deliveryErr) {
                 console.error('Non-critical error creating delivery record:', deliveryErr.message);
             }
+
+            // --- NOTIFICATION: Inform all delivery staff a new pickup is available ---
+            await notifyUsersByRole('delivery_manager', `🚚 A new delivery is available! Order #${id} is ready for pickup.`, 'info');
         }
 
         // Audit Log Fix: Ensure req.user.id exists securely before passing it.

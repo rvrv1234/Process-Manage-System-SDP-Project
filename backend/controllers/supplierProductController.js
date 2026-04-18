@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const { logAudit } = require('../utils/auditLogger');
+const { createNotification } = require('../utils/notificationHelper');
 
 // 1. Get all raw materials for the Marketplace
 const getSupplierMaterials = async (req, res) => {
@@ -45,7 +46,24 @@ const placePurchaseOrder = async (req, res) => {
         
         const auditUserId = req.user?.id || req.body?.user_id || null;
         await logAudit(auditUserId, 'PLACE_PURCHASE_ORDER', 'purchase_orders', poId);
-        
+
+        // --- NOTIFICATION: Inform the supplier they received a new purchase order ---
+        try {
+            const supplierUserResult = await client.query(
+                'SELECT user_id FROM suppliers WHERE supplier_id = $1',
+                [supplier_id]
+            );
+            if (supplierUserResult.rows.length > 0) {
+                await createNotification(
+                    supplierUserResult.rows[0].user_id,
+                    `📩 You have received a new purchase order (PO #${poId}) from the owner.`,
+                    'info'
+                );
+            }
+        } catch (notifErr) {
+            console.error('[Notification] Failed to notify supplier on new PO:', notifErr.message);
+        }
+
         res.status(201).json({ message: "Purchase Order Placed Successfully", po_id: poId });
     } catch (err) {
         await client.query('ROLLBACK');

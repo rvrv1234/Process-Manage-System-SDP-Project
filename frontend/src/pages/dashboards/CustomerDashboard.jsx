@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import PaymentWrapper from '../../components/PaymentWrapper';
+import NotificationBell from '../../components/NotificationBell';
 
 import {
   MdDashboard,
@@ -703,6 +704,7 @@ export default function CustomerDashboard() {
               </span>
             )}
           </div>
+          <NotificationBell userId={user?.id} />
           <button
             onClick={() => setShowProfileModal(true)}
             style={{

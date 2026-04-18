@@ -7,6 +7,7 @@ import {
   MdAccessTime, MdArrowForward, MdTrendingUp, MdClose
 } from 'react-icons/md';
 import { useAuth } from '../../context/AuthContext';
+import NotificationBell from '../../components/NotificationBell';
 
 export default function StaffDashboard() {
   const { user } = useAuth();
@@ -270,7 +271,7 @@ export default function StaffDashboard() {
           <button style={styles.navItem(activeTab === 'production')} onClick={() => setActiveTab('production')}><MdFactory size={18} /> Production</button>
         </div>
         <div style={styles.userSection}>
-          <div style={{position:'relative'}}><MdNotifications size={24} color="#9ca3af" /><span style={{position:'absolute', top:'-6px', right:'-6px', backgroundColor:'#ef4444', color:'white', fontSize:'10px', width:'16px', height:'16px', borderRadius:'50%', display:'flex', justifyContent:'center', alignItems:'center'}}>2</span></div>
+          <NotificationBell userId={user?.id} />
           <button 
             onClick={() => setShowProfileModal(true)}
             style={{ 

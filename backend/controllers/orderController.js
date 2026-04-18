@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const { logAudit } = require('../utils/auditLogger');
+const { createNotification, notifyUsersByRole } = require('../utils/notificationHelper');
 
 // 1. Create a Customer Order
 const createCustomerOrder = async (req, res) => {
@@ -71,6 +72,19 @@ const createCustomerOrder = async (req, res) => {
         const auditUserId = req.user?.id || user_id || null;
         await logAudit(auditUserId, 'CREATE_ORDER', 'orders', orderId);
 
+        // --- NOTIFICATIONS ---
+        // Notify the owner that a new customer order has arrived
+        try {
+            const customerNameResult = await pool.query(
+                'SELECT u.name FROM users u JOIN customers c ON c.user_id = u.id WHERE c.customer_id = $1',
+                [customer_id]
+            );
+            const customerName = customerNameResult.rows[0]?.name || 'A customer';
+            await notifyUsersByRole('admin', `📦 New order #${orderId} received from ${customerName}`, 'info');
+        } catch (notifErr) {
+            console.error('[Notification] Failed to notify owner on new order:', notifErr.message);
+        }
+
         res.status(201).json({ message: "Order Placed Successfully", order_id: orderId });
     } catch (err) {
         await client.query('ROLLBACK');
@@ -136,6 +150,20 @@ const updateCustomerOrderStatus = async (req, res) => {
         
         const auditUserId = req.user?.id || req.body?.user_id || null;
         await logAudit(auditUserId, 'UPDATE_ORDER_STATUS', 'orders', id);
+
+        // --- NOTIFICATION: Tell the customer their order status changed ---
+        try {
+            const customerUserResult = await pool.query(
+                'SELECT c.user_id FROM customers c JOIN orders o ON o.customer_id = c.customer_id WHERE o.order_id = $1',
+                [id]
+            );
+            if (customerUserResult.rows.length > 0) {
+                const customerUserId = customerUserResult.rows[0].user_id;
+                await createNotification(customerUserId, `🔔 Your order #${id} status has been updated to: ${status}`, 'info');
+            }
+        } catch (notifErr) {
+            console.error('[Notification] Failed to notify customer on order status change:', notifErr.message);
+        }
         
         res.json({ message: "Order status updated", order: result.rows[0] });
     } catch (err) {

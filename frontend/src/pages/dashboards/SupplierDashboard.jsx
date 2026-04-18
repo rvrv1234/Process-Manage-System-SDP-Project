@@ -7,6 +7,7 @@ import {
   MdTrendingUp, MdTrendingDown, MdAttachMoney, MdClose
 } from 'react-icons/md';
 import { useAuth } from '../../context/AuthContext';
+import NotificationBell from '../../components/NotificationBell';
 
 export default function SupplierDashboard() {
   const { user, login } = useAuth();
@@ -358,7 +359,7 @@ export default function SupplierDashboard() {
           <button style={styles.navItem(activeTab === 'returns')} onClick={() => setActiveTab('returns')}><MdLocalShipping size={18} /> Return Requests</button>
         </div>
         <div style={styles.userSection}>
-          <div style={{position:'relative'}}><MdNotifications size={24} color="#9ca3af" /><span style={{position:'absolute', top:'-6px', right:'-6px', backgroundColor:'#ef4444', color:'white', fontSize:'10px', width:'16px', height:'16px', borderRadius:'50%', display:'flex', justifyContent:'center', alignItems:'center'}}>2</span></div>
+          <NotificationBell userId={user?.id} />
           <button 
             onClick={() => setShowProfileModal(true)}
             style={{ 

@@ -7,6 +7,7 @@ import {
   MdTrendingUp, MdLocationOn, MdDirectionsCar, MdMap, MdSupportAgent, MdStar, MdClose
 } from 'react-icons/md';
 import { useAuth } from '../../context/AuthContext';
+import NotificationBell from '../../components/NotificationBell';
 
 export default function DeliveryDashboard() {
   const { user } = useAuth();
@@ -177,7 +178,7 @@ export default function DeliveryDashboard() {
           <button style={styles.navItem(activeTab === 'my-deliveries')} onClick={() => setActiveTab('my-deliveries')}><MdLocalShipping size={18} /> My Deliveries</button>
         </div>
         <div style={styles.userSection}>
-          <div style={{position:'relative'}}><MdNotifications size={24} color="#9ca3af" /><span style={{position:'absolute', top:'-6px', right:'-6px', backgroundColor:'#ef4444', color:'white', fontSize:'10px', width:'16px', height:'16px', borderRadius:'50%', display:'flex', justifyContent:'center', alignItems:'center'}}>1</span></div>
+          <NotificationBell userId={user?.id} />
           <button 
             onClick={() => setShowProfileModal(true)}
             style={{ 

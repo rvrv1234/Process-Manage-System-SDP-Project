@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const { logAudit } = require('../utils/auditLogger');
+const { notifyUsersByRole } = require('../utils/notificationHelper');
 
 // 1. Get all inventory items
 const getInventory = async (req, res) => {
@@ -58,6 +59,23 @@ const updateInventoryItem = async (req, res) => {
         
         const auditUserId = req.user?.id || req.body?.user_id || null;
         await logAudit(auditUserId, 'UPDATE_INVENTORY_ITEM', 'inventory', id);
+
+        // --- NOTIFICATIONS: Alert inventory staff on low/empty stock ---
+        const updatedItem = result.rows[0];
+        const stockNum = Number(updatedItem.stock);
+        if (stockNum === 0) {
+            await notifyUsersByRole(
+                'inventory_manager',
+                `⚠️ OUT OF STOCK: "${updatedItem.name}" has 0 units remaining!`,
+                'error'
+            );
+        } else if (stockNum <= 10) {
+            await notifyUsersByRole(
+                'inventory_manager',
+                `🟡 Low Stock: "${updatedItem.name}" is running low (${stockNum} ${updatedItem.unit} left)`,
+                'warning'
+            );
+        }
         
         res.json(result.rows[0]);
     } catch (err) {

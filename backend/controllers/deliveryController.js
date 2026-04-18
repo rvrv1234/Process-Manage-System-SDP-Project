@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const { logAudit } = require('../utils/auditLogger');
+const { createNotification } = require('../utils/notificationHelper');
 
 // 1. Get Available Orders for Pickup
 // Queries orders with status 'READY FOR DELIVERY' that have no delivery record yet.
@@ -89,6 +90,23 @@ const claimOrder = async (req, res) => {
 
         const deliveryRecord = insertRes.rows[0];
         await logAudit(userId, 'DRIVER_CLAIMED_DELIVERY', 'deliveries', deliveryRecord.delivery_id);
+
+        // --- NOTIFICATION: Inform customer their order has been picked up ---
+        try {
+            const customerUserResult = await pool.query(
+                'SELECT c.user_id FROM customers c JOIN orders o ON o.customer_id = c.customer_id WHERE o.order_id = $1',
+                [orderId]
+            );
+            if (customerUserResult.rows.length > 0) {
+                await createNotification(
+                    customerUserResult.rows[0].user_id,
+                    `📦 Your order #${orderId} has been picked up and is on its way!`,
+                    'info'
+                );
+            }
+        } catch (notifErr) {
+            console.error('[Notification] Failed to notify customer on pickup:', notifErr.message);
+        }
 
         res.json({ 
             message: "Order claimed successfully!",
@@ -181,6 +199,23 @@ const completeDelivery = async (req, res) => {
         await client.query('COMMIT');
 
         await logAudit(userId, 'DRIVER_COMPLETED_DELIVERY', 'deliveries', deliveryId);
+
+        // --- NOTIFICATION: Inform customer their order has been delivered ---
+        try {
+            const customerUserResult = await pool.query(
+                'SELECT c.user_id FROM customers c JOIN orders o ON o.customer_id = c.customer_id WHERE o.order_id = $1',
+                [orderId]
+            );
+            if (customerUserResult.rows.length > 0) {
+                await createNotification(
+                    customerUserResult.rows[0].user_id,
+                    `✅ Your order #${orderId} has been delivered successfully!`,
+                    'success'
+                );
+            }
+        } catch (notifErr) {
+            console.error('[Notification] Failed to notify customer on delivery completion:', notifErr.message);
+        }
 
         res.json({ message: "Delivery marked as completed successfully." });
     } catch (err) {

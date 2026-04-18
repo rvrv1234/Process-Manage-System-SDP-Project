@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import PaymentWrapper from '../../components/PaymentWrapper';
+import NotificationBell from '../../components/NotificationBell';
 import {
   MdDashboard, MdShoppingCart, MdInventory, MdPeople, MdFactory, MdLocalShipping, MdAssessment,
   MdNotifications, MdLogout, MdTrendingUp, MdAttachMoney, MdShowChart, MdAdd, MdVisibility,
@@ -744,6 +745,7 @@ export default function OwnerDashboard() {
             </div>
             <div style={{ width: '35px', height: '35px', borderRadius: '50%', backgroundColor: '#f59e0b', display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'white', fontWeight: '700', fontSize: '14px' }}>{user?.name?.substring(0, 2).toUpperCase() || 'OW'}</div>
           </button>
+          <NotificationBell userId={user?.id} />
           <MdLogout size={22} color="#9ca3af" style={{ cursor: 'pointer', marginLeft: '10px' }} onClick={handleLogout} title="Logout" />
         </div>
       </header>
