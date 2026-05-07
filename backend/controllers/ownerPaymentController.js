@@ -35,7 +35,7 @@ const saveOwnerPayment = async (req, res) => {
         const auditUserId = req.user?.id || owner_id || null;
         await logAudit(auditUserId, 'PROCESS_PAYMENT', 'purchase_orders', poId);
 
-        // --- NOTIFICATION: Inform the supplier they received a new purchase order ---
+        // Inform the supplier they received a new purchase order 
         try {
             const supplierUserResult = await pool.query(
                 'SELECT user_id FROM suppliers WHERE supplier_id = $1',

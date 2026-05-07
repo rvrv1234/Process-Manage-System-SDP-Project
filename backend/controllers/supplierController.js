@@ -4,7 +4,7 @@ const nodemailer = require('nodemailer');
 const jwt = require('jsonwebtoken');
 const { logAudit } = require('../utils/auditLogger');
 
-// --- SETUP EMAIL TRANSPORTER (GMAIL) ---
+// SETUP EMAIL 
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
@@ -13,7 +13,7 @@ const transporter = nodemailer.createTransport({
     }
 });
 
-// 1. Get All Pending Suppliers
+//Get All Pending Suppliers
 const getPendingSuppliers = async (req, res) => {
     try {
         const result = await pool.query(
@@ -29,13 +29,13 @@ const getPendingSuppliers = async (req, res) => {
     }
 };
 
-// 2. Approve or Reject Supplier
+// Approve or Reject Supplier
 const updateSupplierStatus = async (req, res) => {
     const { id } = req.params; // Supplier ID
     const { status } = req.body; // 'Approved' or 'Rejected'
 
     try {
-        // A. Update Supplier Table
+        //  Update Supplier Table
         const supplierResult = await pool.query(
             'UPDATE suppliers SET status = $1 WHERE supplier_id = $2 RETURNING *',
             [status, id]
@@ -47,17 +47,17 @@ const updateSupplierStatus = async (req, res) => {
 
         const userId = supplierResult.rows[0].user_id;
 
-        // B. If Approved, send verification email
+        //  If Approved, send verification email
         if (status === 'Approved') {
             // Get User Email
             const userResult = await pool.query('SELECT email FROM users WHERE id = $1', [userId]);
             const userEmail = userResult.rows[0].email;
 
-            // Generate Verification Token (7 days expiry)
+            // Generate Verification Token 
             const emailToken = jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: '7d' });
             const url = `http://localhost:5000/api/auth/verify/${emailToken}`;
 
-            // Send Approval + Verification Email
+            // Send Verification Email
             await transporter.sendMail({
                 to: userEmail,
                 subject: 'Congratulations! Supplier Request Approved',
@@ -83,7 +83,7 @@ const updateSupplierStatus = async (req, res) => {
     }
 };
 
-// 3. Get All Approved/Active Suppliers
+// Get All Approved Suppliers
 const getApprovedSuppliers = async (req, res) => {
     try {
         const result = await pool.query(
@@ -99,7 +99,7 @@ const getApprovedSuppliers = async (req, res) => {
     }
 };
 
-// 4. Update Purchase Order Status (Accepted/Rejected)
+// Update Purchase Order Status (Accepted/Rejected)
 const updatePOStatus = async (req, res) => {
     const { id } = req.params; // po_id
     const { status } = req.body; // 'Accepted' or 'Rejected'
@@ -125,12 +125,12 @@ const updatePOStatus = async (req, res) => {
     }
 };
 
-// 5. Create Return Request
+// Create Return Request
 const createReturnRequest = async (req, res) => {
     let { po_id, supplier_id, reason } = req.body;
     
     try {
-        // --- BACKEND FALLBACK FOR SUPPLIER_ID ---
+        // BACKEND FALLBACK FOR SUPPLIER_ID 
         if (!supplier_id || supplier_id === undefined) {
           const poResult = await pool.query("SELECT supplier_id FROM purchase_orders WHERE po_id = $1", [po_id]);
           if (poResult.rows.length > 0) {
@@ -157,7 +157,7 @@ const createReturnRequest = async (req, res) => {
     }
 };
 
-// 6. Get Return Requests for a Supplier
+//  Get Return Requests for a Supplier
 const getReturnRequestsBySupplier = async (req, res) => {
     const { supplierId } = req.params;
     try {
@@ -176,7 +176,7 @@ const getReturnRequestsBySupplier = async (req, res) => {
     }
 };
 
-// 7. Update Return Request Status (Approve/Reject)
+// Update Return Request Status (Approve/Reject)
 const updateReturnStatus = async (req, res) => {
     const { id } = req.params; // return_id
     const { status } = req.body; // 'Approved' or 'Rejected'
@@ -200,12 +200,12 @@ const updateReturnStatus = async (req, res) => {
     }
 };
 
-// 8. Update Profile (Supplier)
+//  Update Profile 
 const updateProfile = async (req, res) => {
     const full_name = req.body.full_name || req.body.name;
     const contact_info = req.body.contact_info || req.body.phone;
     const address = req.body.address;
-    const userId = req.user.id; // from auth middleware
+    const userId = req.user.id; 
 
     const client = await pool.connect();
 

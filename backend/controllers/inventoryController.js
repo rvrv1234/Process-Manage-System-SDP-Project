@@ -2,14 +2,14 @@ const pool = require('../config/db');
 const { logAudit } = require('../utils/auditLogger');
 const { notifyUsersByRole } = require('../utils/notificationHelper');
 
-// 1. Get all inventory items
+// Get all inventory items
 const getInventory = async (req, res) => {
     try {
         const result = await pool.query(`
             SELECT *, 
             CASE 
-                WHEN stock > 10 THEN 'In Stock'
-                WHEN stock > 0 AND stock <= 10 THEN 'Low Stock'
+                WHEN stock > 30 THEN 'In Stock'
+                WHEN stock > 0 AND stock <= 30 THEN 'Low Stock'
                 ELSE 'Out of Stock'
             END as status
             FROM inventory 
@@ -22,12 +22,12 @@ const getInventory = async (req, res) => {
     }
 };
 
-// 2. Add new inventory item
+// Add new inventory item
 const addInventoryItem = async (req, res) => {
     const { name, category, stock, unit, price } = req.body;
     try {
         const result = await pool.query(
-            "INSERT INTO inventory (name, category, stock, unit, price, status) VALUES ($1, $2, $3, $4, $5, CASE WHEN $3::numeric > 10 THEN 'In Stock' WHEN $3::numeric > 0 THEN 'Low Stock' ELSE 'Out of Stock' END) RETURNING *",
+            "INSERT INTO inventory (name, category, stock, unit, price, status) VALUES ($1, $2, $3::numeric, $4, $5, CASE WHEN $3::numeric > 30 THEN 'In Stock' WHEN $3::numeric > 0 THEN 'Low Stock' ELSE 'Out of Stock' END) RETURNING *",
             [name, category, stock, unit, price]
         );
         
@@ -41,15 +41,15 @@ const addInventoryItem = async (req, res) => {
     }
 };
 
-// 3. Edit inventory item (Update Stock & Price when order arrives)
+// Edit inventory item 
 const updateInventoryItem = async (req, res) => {
     const { id } = req.params;
     const { stock, price, name, category, unit } = req.body;
     
     try {
-        // Build dynamic query based on what exactly was sent (mostly stock and price as requested by user)
+        
         const result = await pool.query(
-            "UPDATE inventory SET stock = $1, price = $2, name = $3, category = $4, unit = $5, last_updated = CURRENT_TIMESTAMP, status = CASE WHEN $1::numeric > 10 THEN 'In Stock' WHEN $1::numeric > 0 THEN 'Low Stock' ELSE 'Out of Stock' END WHERE inventory_id = $6 RETURNING *",
+            "UPDATE inventory SET stock = $1::numeric, price = $2, name = $3, category = $4, unit = $5, last_updated = CURRENT_TIMESTAMP, status = CASE WHEN $1::numeric > 30 THEN 'In Stock' WHEN $1::numeric > 0 THEN 'Low Stock' ELSE 'Out of Stock' END WHERE inventory_id = $6 RETURNING *",
             [stock, price, name, category, unit, id]
         );
 
@@ -60,18 +60,18 @@ const updateInventoryItem = async (req, res) => {
         const auditUserId = req.user?.id || req.body?.user_id || null;
         await logAudit(auditUserId, 'UPDATE_INVENTORY_ITEM', 'inventory', id);
 
-        // --- NOTIFICATIONS: Alert inventory staff on low/empty stock ---
+        //  Alert inventory staff on low/empty stock 
         const updatedItem = result.rows[0];
         const stockNum = Number(updatedItem.stock);
         if (stockNum === 0) {
             await notifyUsersByRole(
-                'inventory_manager',
+                'owner',
                 `⚠️ OUT OF STOCK: "${updatedItem.name}" has 0 units remaining!`,
                 'error'
             );
-        } else if (stockNum <= 10) {
+        } else if (stockNum <= 30) {
             await notifyUsersByRole(
-                'inventory_manager',
+                'owner',
                 `🟡 Low Stock: "${updatedItem.name}" is running low (${stockNum} ${updatedItem.unit} left)`,
                 'warning'
             );

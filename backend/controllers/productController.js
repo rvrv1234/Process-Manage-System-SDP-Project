@@ -1,7 +1,8 @@
 const pool = require('../config/db');
 const { logAudit } = require('../utils/auditLogger');
+const { notifyUsersByRole } = require('../utils/notificationHelper');
 
-// 1. Get all products
+// Get all products
 const getCatalog = async (req, res) => {
     try {
         const result = await pool.query(`
@@ -14,7 +15,7 @@ const getCatalog = async (req, res) => {
             p.raw_material_id, p.raw_material_quantity,
             COALESCE(
                 json_agg(
-                    json_build_object('weight', pp.weight, 'quantity', pp.quantity)
+                    json_build_object('weight', pp.weight, 'quantity', pp.quantity, 'price', pp.price)
                 ) FILTER (WHERE pp.weight IS NOT NULL), 
                 '[]'
             ) as packets
@@ -30,7 +31,7 @@ const getCatalog = async (req, res) => {
     }
 };
 
-// 2. Add product with Raw Material Deduction
+//  Add product with Raw Material Deduction
 const addProduct = async (req, res) => {
     const { name, category, description, price, stock_level, raw_material_id, raw_material_quantity, packets } = req.body;
     
@@ -38,23 +39,41 @@ const addProduct = async (req, res) => {
     try {
         await client.query('BEGIN');
         
-        // Step 1: Insert into products table
+        //  Insert into products table
         const productResult = await client.query(
-            "INSERT INTO products (name, category, description, price, stock_level, status, raw_material_id, raw_material_quantity) VALUES ($1, $2, $3, $4, $5, CASE WHEN $5::numeric > 10 THEN 'In Stock' WHEN $5::numeric > 0 THEN 'Low Stock' ELSE 'Out of Stock' END, $6, $7) RETURNING *",
+            "INSERT INTO products (name, category, description, price, stock_level, status, raw_material_id, raw_material_quantity) VALUES ($1, $2, $3, $4, $5::numeric, CASE WHEN $5::numeric > 10 THEN 'In Stock' WHEN $5::numeric > 0 THEN 'Low Stock' ELSE 'Out of Stock' END, $6, $7) RETURNING *",
             [name, category, description, price, stock_level, raw_material_id, raw_material_quantity]
         );
         const productId = productResult.rows[0].product_id;
 
-        // Step 2: Deduct from inventory if provided
+        // Deduct from inventory if provided
         if (raw_material_id && raw_material_quantity && Number(raw_material_quantity) > 0) {
-            await client.query(
-                "UPDATE inventory SET stock = stock - ($1::numeric) WHERE inventory_id = $2",
+            const invUpdate = await client.query(
+                "UPDATE inventory SET stock = stock - ($1::numeric), status = CASE WHEN stock - ($1::numeric) > 30 THEN 'In Stock' WHEN stock - ($1::numeric) > 0 THEN 'Low Stock' ELSE 'Out of Stock' END WHERE inventory_id = $2 RETURNING stock, name, unit",
                 [raw_material_quantity, raw_material_id]
             );
+            if (invUpdate.rows.length > 0) {
+                const updatedItem = invUpdate.rows[0];
+                const stockNum = Number(updatedItem.stock);
+                if (stockNum <= 0) {
+                    await notifyUsersByRole('owner', `⚠️ OUT OF STOCK: "${updatedItem.name}" has 0 units remaining!`, 'error');
+                } else if (stockNum <= 30) {
+                    await notifyUsersByRole('owner', `🟡 Low Stock: "${updatedItem.name}" is running low (${stockNum} ${updatedItem.unit} left)`, 'warning');
+                }
+            }
         }
 
-        // Step 3: Insert initial packets if provided
-        if (packets && typeof packets === 'object') {
+        //  Insert initial packets if provided
+        if (packets && Array.isArray(packets)) {
+            for (const p of packets) {
+                if (p.weight) {
+                    await client.query(
+                        "INSERT INTO product_packets (inventory_id, weight, quantity, price) VALUES ($1, $2, $3, $4)",
+                        [productId, p.weight, parseInt(p.quantity) || 0, parseFloat(p.price) || 0]
+                    );
+                }
+            }
+        } else if (packets && typeof packets === 'object') {
             for (const [weight, quantity] of Object.entries(packets)) {
                 await client.query(
                     "INSERT INTO product_packets (inventory_id, weight, quantity) VALUES ($1, $2, $3)",
@@ -78,7 +97,7 @@ const addProduct = async (req, res) => {
     }
 };
 
-// 3. Update product with dynamic Raw Material Deduction
+// 3. Update product
 const updateProduct = async (req, res) => {
     const { id } = req.params;
     const { name, category, description, price, stock_level, raw_material_id, raw_material_quantity_per_unit, packets } = req.body;
@@ -88,7 +107,7 @@ const updateProduct = async (req, res) => {
     try {
         await client.query('BEGIN');
 
-        // Step 1: Fetch old product to calculate delta
+        //  Fetch old product to calculate delta
         const oldProductQuery = await client.query("SELECT stock_level FROM products WHERE product_id = $1", [id]);
         if (oldProductQuery.rows.length === 0) {
             await client.query('ROLLBACK');
@@ -101,37 +120,56 @@ const updateProduct = async (req, res) => {
         
         const stockAdded = newStockLevel - oldStockLevel;
 
-        // Step 2: Deduct from inventory if stock increased AND mapping exists
+        // Deduct from inventory if stock increased 
         if (stockAdded > 0 && raw_material_id && raw_material_quantity_per_unit && Number(raw_material_quantity_per_unit) > 0) {
             const totalRawMaterialToDeduct = stockAdded * Number(raw_material_quantity_per_unit);
-            await client.query(
-                "UPDATE inventory SET stock = stock - ($1::numeric) WHERE inventory_id = $2",
+            const invUpdate = await client.query(
+                "UPDATE inventory SET stock = stock - ($1::numeric), status = CASE WHEN stock - ($1::numeric) > 30 THEN 'In Stock' WHEN stock - ($1::numeric) > 0 THEN 'Low Stock' ELSE 'Out of Stock' END WHERE inventory_id = $2 RETURNING stock, name, unit",
                 [totalRawMaterialToDeduct, raw_material_id]
             );
+            if (invUpdate.rows.length > 0) {
+                const updatedItem = invUpdate.rows[0];
+                const stockNum = Number(updatedItem.stock);
+                if (stockNum <= 0) {
+                    await notifyUsersByRole('owner', `⚠️ OUT OF STOCK: "${updatedItem.name}" has 0 units remaining!`, 'error');
+                } else if (stockNum <= 30) {
+                    await notifyUsersByRole('owner', `🟡 Low Stock: "${updatedItem.name}" is running low (${stockNum} ${updatedItem.unit} left)`, 'warning');
+                }
+            }
         }
 
-        // Step 3: Update the actual product
+        //  Update the actual product
         const result = await client.query(
-            "UPDATE products SET name = $1, category = $2, description = $3, price = $4, stock_level = $5, status = CASE WHEN $5::numeric > 10 THEN 'In Stock' WHEN $5::numeric > 0 THEN 'Low Stock' ELSE 'Out of Stock' END WHERE product_id = $6 RETURNING *",
+            "UPDATE products SET name = $1, category = $2, description = $3, price = $4, stock_level = $5::numeric, status = CASE WHEN $5::numeric > 10 THEN 'In Stock' WHEN $5::numeric > 0 THEN 'Low Stock' ELSE 'Out of Stock' END WHERE product_id = $6 RETURNING *",
             [name, category, description, price, stock_level, id]
         );
 
-        // Step 4: Update individual packets if provided (Absolute Update for Owner)
+        //  Update individual packets if provided
         if (packets) {
-            const packetEntries = Array.isArray(packets) 
-                ? packets.map(p => [p.weight, p.quantity]) 
-                : Object.entries(packets);
-
-            for (const [weight, quantity] of packetEntries) {
-                 if (weight) {
-                     await client.query(
-                        `INSERT INTO product_packets (inventory_id, weight, quantity)
-                         VALUES ($1, $2, $3)
-                         ON CONFLICT (inventory_id, weight)
-                         DO UPDATE SET quantity = EXCLUDED.quantity`,
-                        [id, weight, parseInt(quantity) || 0]
-                     );
-                 }
+            if (Array.isArray(packets)) {
+                for (const p of packets) {
+                    if (p.weight) {
+                        await client.query(
+                            `INSERT INTO product_packets (inventory_id, weight, quantity, price)
+                             VALUES ($1, $2, $3, $4)
+                             ON CONFLICT (inventory_id, weight)
+                             DO UPDATE SET quantity = EXCLUDED.quantity, price = EXCLUDED.price`,
+                            [id, p.weight, parseInt(p.quantity) || 0, parseFloat(p.price) || 0]
+                        );
+                    }
+                }
+            } else {
+                for (const [weight, quantity] of Object.entries(packets)) {
+                     if (weight) {
+                         await client.query(
+                            `INSERT INTO product_packets (inventory_id, weight, quantity)
+                             VALUES ($1, $2, $3)
+                             ON CONFLICT (inventory_id, weight)
+                             DO UPDATE SET quantity = EXCLUDED.quantity`,
+                            [id, weight, parseInt(quantity) || 0]
+                         );
+                     }
+                }
             }
         }
         
@@ -150,7 +188,7 @@ const updateProduct = async (req, res) => {
     }
 };
 
-// 4. Delete product
+//  Delete product
 const deleteProduct = async (req, res) => {
     const { id } = req.params;
     try {

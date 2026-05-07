@@ -2,7 +2,7 @@ const pool = require('../config/db');
 const { logAudit } = require('../utils/auditLogger');
 const { createNotification } = require('../utils/notificationHelper');
 
-// 1. Get all raw materials for the Marketplace
+//  Get all raw materials for the Marketplace
 const getSupplierMaterials = async (req, res) => {
     try {
         const result = await pool.query(`
@@ -19,10 +19,10 @@ const getSupplierMaterials = async (req, res) => {
     }
 };
 
-// 2. Place a Purchase Order
+//  Place a Purchase Order
 const placePurchaseOrder = async (req, res) => {
     const { supplier_id, total_amount, items } = req.body; // items: [{ material_id, quantity, unit_price }]
-    
+
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
@@ -34,7 +34,7 @@ const placePurchaseOrder = async (req, res) => {
         );
         const poId = poResult.rows[0].po_id;
 
-        // Insert items (No stock deduction as per new requirement)
+        // Insert items 
         for (const item of items) {
             await client.query(
                 "INSERT INTO purchase_order_items (po_id, material_id, quantity, unit_price) VALUES ($1, $2, $3, $4)",
@@ -43,11 +43,11 @@ const placePurchaseOrder = async (req, res) => {
         }
 
         await client.query('COMMIT');
-        
+
         const auditUserId = req.user?.id || req.body?.user_id || null;
         await logAudit(auditUserId, 'PLACE_PURCHASE_ORDER', 'purchase_orders', poId);
 
-        // --- NOTIFICATION: Inform the supplier they received a new purchase order ---
+        //informthe supplier they received a new purchase order 
         try {
             const supplierUserResult = await client.query(
                 'SELECT user_id FROM suppliers WHERE supplier_id = $1',
@@ -74,7 +74,7 @@ const placePurchaseOrder = async (req, res) => {
     }
 };
 
-// 3. Get all Purchase Orders for the Owner
+// Get all Purchase Orders for the Owner
 const getAllPurchaseOrders = async (req, res) => {
     try {
         const result = await pool.query(`
@@ -94,7 +94,7 @@ const getAllPurchaseOrders = async (req, res) => {
     }
 };
 
-// 3b. Get specific Purchase Orders for a Supplier (via user_id)
+// Get specific Purchase Orders for a Supplier
 const getSupplierPurchaseOrders = async (req, res) => {
     const { userId } = req.params;
     try {
@@ -116,16 +116,16 @@ const getSupplierPurchaseOrders = async (req, res) => {
     }
 };
 
-// 4. Update PO Status (e.g., Mark as Delivered or Rejected)
+//  Update PO Status 
 const updatePurchaseOrderStatus = async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
-    
+
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
 
-        // If Rejected, we might have a reason
+        // If Rejected,  have a reason
         const { reason } = req.body;
 
         const result = await client.query(
@@ -134,14 +134,14 @@ const updatePurchaseOrderStatus = async (req, res) => {
         );
 
         await client.query('COMMIT');
-        
+
         let auditAction = 'UPDATE_PO_STATUS';
         if (status === 'Confirmed') auditAction = 'CONFIRM_PO';
         else if (status === 'Shipped') auditAction = 'SHIP_PO';
 
         const auditUserId = req.user?.id || req.body?.user_id || null;
         await logAudit(auditUserId, auditAction, 'purchase_orders', id);
-        
+
         res.json({ message: `Order marked as ${status}`, order: result.rows[0] });
     } catch (err) {
         await client.query('ROLLBACK');
@@ -152,7 +152,7 @@ const updatePurchaseOrderStatus = async (req, res) => {
     }
 };
 
-// 5. Add a new Supplier Material
+//  Add a new Supplier Material
 const addSupplierMaterial = async (req, res) => {
     const { supplier_id, name, unit_cost } = req.body;
     const stock_level = 0; // Default stock level as it's not required from supplier now
@@ -161,10 +161,10 @@ const addSupplierMaterial = async (req, res) => {
             "INSERT INTO rawmaterials (supplier_id, name, stock_level, unit_cost) VALUES ($1, $2, $3, $4) RETURNING *",
             [supplier_id, name, stock_level, unit_cost]
         );
-        
+
         const auditUserId = req.user?.id || req.body?.user_id || null;
         await logAudit(auditUserId, 'ADD_SUPPLIER_MATERIAL', 'rawmaterials', result.rows[0].material_id);
-        
+
         res.status(201).json({ message: "Material added successfully", material: result.rows[0] });
     } catch (err) {
         console.error("Error adding material:", err.message);
@@ -172,7 +172,7 @@ const addSupplierMaterial = async (req, res) => {
     }
 };
 
-// 6. Get materials for a specific supplier by user_id
+//  Get materials for a specific supplier by user_id
 const getMyMaterials = async (req, res) => {
     const { userId } = req.params;
     try {
@@ -190,15 +190,15 @@ const getMyMaterials = async (req, res) => {
     }
 };
 
-// 7. Delete a Supplier Material
+//  Delete a Supplier Material
 const deleteSupplierMaterial = async (req, res) => {
     const { id } = req.params;
     try {
         await pool.query("DELETE FROM rawmaterials WHERE material_id = $1", [id]);
-        
+
         const auditUserId = req.user?.id || req.body?.user_id || null;
         await logAudit(auditUserId, 'DELETE_SUPPLIER_MATERIAL', 'rawmaterials', id);
-        
+
         res.json({ message: "Material deleted successfully" });
     } catch (err) {
         console.error("Error deleting material:", err.message);
@@ -206,18 +206,18 @@ const deleteSupplierMaterial = async (req, res) => {
     }
 };
 
-module.exports = { 
-    getSupplierMaterials, 
-    placePurchaseOrder, 
-    getAllPurchaseOrders, 
-    updatePurchaseOrderStatus, 
+module.exports = {
+    getSupplierMaterials,
+    placePurchaseOrder,
+    getAllPurchaseOrders,
+    updatePurchaseOrderStatus,
     getSupplierPurchaseOrders,
     addSupplierMaterial,
     getMyMaterials,
     deleteSupplierMaterial
 };
 
-// 8. Mark PO as Received / Delivered (Owner action)
+//  Mark PO as Received / Delivered (Owner action)
 const markAsReceived = async (req, res) => {
     const { id } = req.params; // po_id
 
@@ -225,7 +225,7 @@ const markAsReceived = async (req, res) => {
     try {
         await client.query('BEGIN');
 
-        // 1. Update status
+        //  Update status
         const result = await client.query(
             "UPDATE purchase_orders SET status = 'Delivered' WHERE po_id = $1 RETURNING *",
             [id]
@@ -236,7 +236,7 @@ const markAsReceived = async (req, res) => {
             return res.status(404).json({ message: "Purchase Order not found" });
         }
 
-        // 2. Fetch PO Items to sync inventory
+        //  Fetch PO Items to sync inventory
         const itemsRes = await client.query(`
             SELECT poi.quantity, rm.name, rm.unit_cost 
             FROM purchase_order_items poi 
@@ -244,10 +244,10 @@ const markAsReceived = async (req, res) => {
             WHERE poi.po_id = $1
         `, [id]);
 
-        // 3. Increment inventory matching by name
+        //  Increment inventory matching by name
         for (const item of itemsRes.rows) {
             const invCheck = await client.query("SELECT inventory_id, stock FROM inventory WHERE name = $1", [item.name]);
-            
+
             if (invCheck.rows.length > 0) {
                 // Update existing stock
                 await client.query(
@@ -265,7 +265,7 @@ const markAsReceived = async (req, res) => {
 
         await client.query('COMMIT');
 
-        // 4. Specific Audit Log for 'ORDER_RECEIVED'
+        //  Specific Audit Log for 'ORDER_RECEIVED'
         const auditUserId = req.user?.id || req.body?.user_id || null;
         await logAudit(auditUserId, 'ORDER_RECEIVED', 'purchase_orders', id);
 
@@ -279,7 +279,7 @@ const markAsReceived = async (req, res) => {
     }
 };
 
-// 9. Get detailed PO formatting for Supplier Invoice + Audit Log
+//  Get detailed PO formatting for Supplier Invoice + Audit Log
 const getSupplierInvoice = async (req, res) => {
     const { id } = req.params; // po_id
 

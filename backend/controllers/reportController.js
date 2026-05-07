@@ -1,6 +1,6 @@
 const pool = require('../config/db');
 
-// 1. Get Financial Summary (Revenue, Expenses, Profit)
+// Get Financial Summary (Revenue, Expenses, Profit)
 const getFinancialSummary = async (req, res) => {
     try {
         const revenueResult = await pool.query(`
@@ -31,8 +31,9 @@ const getFinancialSummary = async (req, res) => {
     }
 };
 
-// 2. Get Sales By Product
+// Get Sales By Product
 const getSalesByProduct = async (req, res) => {
+    // validation using try, catch
     try {
         const result = await pool.query(`
             SELECT p.name, SUM(oi.quantity) as total_quantity, SUM(oi.quantity * oi.unit_price) as total_revenue
@@ -50,7 +51,7 @@ const getSalesByProduct = async (req, res) => {
     }
 };
 
-// 3. Get Order Trends (Daily Revenue for last 30 days)
+// Get Order Trends (Daily Revenue for last 30 days)
 const getOrderTrends = async (req, res) => {
     try {
         const result = await pool.query(`
@@ -99,10 +100,10 @@ const getAuditReport = async (req, res) => {
     }
 };
 
-module.exports = { 
-    getFinancialSummary, 
-    getSalesByProduct, 
-    getOrderTrends, 
+module.exports = {
+    getFinancialSummary,
+    getSalesByProduct,
+    getOrderTrends,
     getInventoryDistribution,
     getAuditReport
 };

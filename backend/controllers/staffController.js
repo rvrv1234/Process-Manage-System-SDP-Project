@@ -2,9 +2,9 @@ const pool = require('../config/db');
 const bcrypt = require('bcryptjs');
 const { logAudit } = require('../utils/auditLogger');
 
-// --- A. STAFF MANAGEMENT FUNCTIONS ---
+// STAFF MANAGEMENT 
 
-// 1. Get All Staff
+// Get All Staff
 const getStaff = async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM staff ORDER BY staff_id DESC');
@@ -15,7 +15,7 @@ const getStaff = async (req, res) => {
     }
 };
 
-// 2. Add New Staff
+// Add New Staff
 const addStaff = async (req, res) => {
     const { name, role, email, phone, password } = req.body;
     try {
@@ -51,7 +51,7 @@ const addStaff = async (req, res) => {
             [name, email, hashedPassword, userRole, phone]
         );
 
-        // Insert into staff table (including hashed password as requested)
+        // Insert into staff table 
         const result = await pool.query(
             "INSERT INTO staff (name, role, email, phone, status, password) VALUES ($1, $2, $3, $4, 'Active', $5) RETURNING *",
             [name, role, email, phone, hashedPassword]
@@ -70,7 +70,7 @@ const addStaff = async (req, res) => {
     }
 };
 
-// 3. Remove Staff
+//  Remove Staff
 const deleteStaff = async (req, res) => {
     const { id } = req.params;
     try {
@@ -102,9 +102,9 @@ const deleteStaff = async (req, res) => {
     }
 };
 
-// --- B. CATALOG MANAGEMENT FUNCTIONS ---
+//  CATALOG MANAGEMENT FUNCTIONS 
 
-// 4. Update Catalog (Packets)
+// Update Catalog 
 const updateCatalog = async (req, res) => {
     const { productId, packets } = req.body; 
 
@@ -118,7 +118,7 @@ const updateCatalog = async (req, res) => {
         for (const [weight, quantity] of Object.entries(packets)) {
             const qty = parseInt(quantity, 10) || 0;
 
-            // Upsert Logic: Insert if new, ADD to existing if exists
+            //  Insert if new, ADD to existing if exists
             await pool.query(
                 `INSERT INTO product_packets (inventory_id, weight, quantity)
                  VALUES ($1, $2, $3)
@@ -142,7 +142,7 @@ const updateCatalog = async (req, res) => {
     }
 };
 
-// 👇 CRITICAL: Make sure ALL functions are exported here
+
 module.exports = { 
     getStaff, 
     addStaff, 

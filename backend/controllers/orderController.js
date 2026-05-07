@@ -2,7 +2,7 @@ const pool = require('../config/db');
 const { logAudit } = require('../utils/auditLogger');
 const { createNotification, notifyUsersByRole } = require('../utils/notificationHelper');
 
-// 1. Create a Customer Order
+// Create a Customer Order
 const createCustomerOrder = async (req, res) => {
     const { user_id, total_amount, items, payment_method, transaction_id, status } = req.body; // items: [{ product_id, quantity, unit_price }]
     const client = await pool.connect();
@@ -16,7 +16,7 @@ const createCustomerOrder = async (req, res) => {
         }
         const customer_id = customerResult.rows[0].customer_id;
         
-        // --- CUSTOMER STOCK VALIDATION ---
+        // CUSTOMER STOCK VALIDATION 
         for (const item of items) {
             const stockResult = await client.query(
                 "SELECT quantity FROM product_packets WHERE inventory_id = $1 AND weight = $2",
@@ -59,8 +59,8 @@ const createCustomerOrder = async (req, res) => {
                 [item.quantity, item.product_id, item.packet_size]
             );
 
-            // --- AUTO CREATE PRODUCTION BATCH ---
-            // This makes the order appear in the Production tab for staff/owner
+            //  AUTO CREATE PRODUCTION BATCH 
+            
             await client.query(
                 "INSERT INTO production_batches (product_id, quantity, status, due_date, order_id, packet_size) VALUES ($1, $2, 'To Produce', CURRENT_DATE, $3, $4)",
                 [item.product_id, item.quantity, orderId, item.packet_size]
@@ -72,7 +72,7 @@ const createCustomerOrder = async (req, res) => {
         const auditUserId = req.user?.id || user_id || null;
         await logAudit(auditUserId, 'CREATE_ORDER', 'orders', orderId);
 
-        // --- NOTIFICATIONS ---
+        //  NOTIFICATIONS 
         // Notify the owner that a new customer order has arrived
         try {
             const customerNameResult = await pool.query(
@@ -95,7 +95,7 @@ const createCustomerOrder = async (req, res) => {
     }
 };
 
-// 2. Get All Customer Orders (for Owner)
+// Get All Customer Orders 
 const getAllCustomerOrders = async (req, res) => {
     try {
         const result = await pool.query(`
@@ -113,7 +113,7 @@ const getAllCustomerOrders = async (req, res) => {
     }
 };
 
-// 3. Get Orders for a Specific Customer
+//  Get Orders for a Specific Customer
 const getCustomerOrders = async (req, res) => {
     const { userId } = req.params;
     try {
@@ -135,7 +135,7 @@ const getCustomerOrders = async (req, res) => {
     }
 };
 
-// 4. Update Customer Order Status
+// Update Customer Order Status
 const updateCustomerOrderStatus = async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
@@ -151,7 +151,7 @@ const updateCustomerOrderStatus = async (req, res) => {
         const auditUserId = req.user?.id || req.body?.user_id || null;
         await logAudit(auditUserId, 'UPDATE_ORDER_STATUS', 'orders', id);
 
-        // --- NOTIFICATION: Tell the customer their order status changed ---
+        //  Tell the customer their order status changed 
         try {
             const customerUserResult = await pool.query(
                 'SELECT c.user_id FROM customers c JOIN orders o ON o.customer_id = c.customer_id WHERE o.order_id = $1',
@@ -172,13 +172,13 @@ const updateCustomerOrderStatus = async (req, res) => {
     }
 };
 
-// 5. Request a Customer Return
+// Request a Customer Return
 const requestCustomerOrderReturn = async (req, res) => {
     let { order_id, customer_id, reason, user_id } = req.body;
     const image_url = req.file ? `/uploads/returns/${req.file.filename}` : null;
 
     try {
-        // Fallback: If customer_id not provided, find it from user_id
+        //  If customer_id not provided, find it from user_id
         if (!customer_id && user_id) {
             const customerResult = await pool.query("SELECT customer_id FROM customers WHERE user_id = $1", [user_id]);
             if (customerResult.rows.length > 0) {
@@ -209,7 +209,7 @@ const requestCustomerOrderReturn = async (req, res) => {
     }
 };
 
-// 6. Get All Customer Returns (for Owner)
+// Get All Customer Returns (for Owner)
 const getAllCustomerReturns = async (req, res) => {
     try {
         const result = await pool.query(`
@@ -227,7 +227,7 @@ const getAllCustomerReturns = async (req, res) => {
     }
 };
 
-// 7. Update Customer Return Status
+//  Update Customer Return Status
 const updateCustomerReturnStatus = async (req, res) => {
     const { id } = req.params; // return_id
     let { status } = req.body; // 'APPROVED' or 'REJECTED'
@@ -236,7 +236,7 @@ const updateCustomerReturnStatus = async (req, res) => {
     try {
         await client.query('BEGIN');
 
-        // Normalize status to uppercase for DB consistency
+        
         const upperStatus = status?.toUpperCase();
 
         // Update return request status

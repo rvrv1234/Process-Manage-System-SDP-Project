@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-// Ensure this line includes 'useNavigate'
+
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import PaymentWrapper from '../../components/PaymentWrapper';
@@ -27,7 +27,7 @@ export default function CustomerDashboard() {
   const navigate = useNavigate();
   const { user, login } = useAuth();
 
-  // --- NEW STATE FOR CART FUNCTIONALITY ---
+  // NEW STATE FOR CART FUNCTIONALITY 
   const [cartItems, setCartItems] = useState([]);
   const [showPacketModal, setShowPacketModal] = useState(false);
   const [selectedProductForPackets, setSelectedProductForPackets] = useState(null);
@@ -40,16 +40,20 @@ export default function CustomerDashboard() {
   const [profileFormData, setProfileFormData] = useState({ full_name: '', phone_number: '', address: '' });
   const [paymentMethod, setPaymentMethod] = useState('cod'); // 'cod' or 'online'
   const [showPaymentModal, setShowPaymentModal] = useState(false); // Stripe modal
-  
-  // --- RETURN REQUEST STATE ---
+
+  //  RETURN REQUEST STATE 
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [selectedOrderForReturn, setSelectedOrderForReturn] = useState(null);
   const [returnReason, setReturnReason] = useState('');
   const [returnImage, setReturnImage] = useState(null);
   const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
 
+  //  INVOICE STATE 
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [selectedInvoiceData, setSelectedInvoiceData] = useState(null);
 
-  // --- DYNAMIC CATALOG STATE ---
+
+  //  DYNAMIC CATALOG STATE 
   const [catalogList, setCatalogList] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -80,7 +84,7 @@ export default function CustomerDashboard() {
     fetchPastOrders();
   }, [user]);
 
-  // --- NEW FUNCTIONS FOR CART LOGIC ---
+  //  NEW FUNCTIONS FOR CART LOGIC 
 
   // 1. Open Packet Selection Modal
   const handleOpenPacketModal = (product) => {
@@ -89,13 +93,13 @@ export default function CustomerDashboard() {
       const found = (product.packets || []).find(p => p.weight === weight);
       const stockQty = found ? parseInt(found.quantity) : 0;
 
-      // Pricing logic: assume base price is for 100g
-      const numericPrice = Number(product.price);
-      const ratio = parseInt(weight) / 100;
+      const packetPrice = found && found.price > 0
+        ? Number(found.price)
+        : (product.price ? Math.round(Number(product.price) * (parseInt(weight) / 100)) : 0);
 
       return {
         size: weight,
-        price: Math.round(numericPrice * ratio),
+        price: packetPrice,
         label: `${weight} Packet`,
         desc: stockQty > 0 ? 'In Stock' : 'Out of Stock',
         quantity: stockQty
@@ -116,7 +120,7 @@ export default function CustomerDashboard() {
     setShowPacketModal(true);
   };
 
-  // 2. Add Selected Packet to Cart
+  //  Add Selected Packet to Cart
   const handleAddToCart = () => {
     if (!selectedProductForPackets || !selectedPacketOption || orderQuantity < 1) return;
 
@@ -150,7 +154,7 @@ export default function CustomerDashboard() {
     setOrderQuantity(1);
   };
 
-  // 3. Update Quantity in Cart (+/- buttons)
+  //  Update Quantity in Cart 
   const handleUpdateQuantity = (cartId, change) => {
     setCartItems(prevItems => prevItems.map(item => {
       if (item.cartId === cartId) {
@@ -161,15 +165,15 @@ export default function CustomerDashboard() {
     }));
   };
 
-  // 4. Remove Item from Cart
+  //  Remove Item from Cart
   const handleRemoveItem = (cartId) => {
     setCartItems(prevItems => prevItems.filter(item => item.cartId !== cartId));
   };
 
-  // 5. Calculate Total
+  // Calculate Total
   const cartTotal = cartItems.reduce((total, item) => total + (item.price * item.quantity), 0);
 
-  // 6. Checkout Flow
+  //  Checkout Flow
   const handleCheckout = async () => {
     console.log("Checking out with payment method:", paymentMethod);
 
@@ -245,7 +249,7 @@ export default function CustomerDashboard() {
       alert('Payment succeeded but order creation failed. Please contact support.');
     }
   };
-  
+
   const handleOpenReturnModal = (order) => {
     setSelectedOrderForReturn(order);
     setReturnReason('');
@@ -316,7 +320,25 @@ export default function CustomerDashboard() {
     }
   };
 
-  // --- STYLES ---
+  //  CALCULATE DYNAMIC STATS 
+  const totalOrdersCount = pastOrders.length;
+  const pendingDeliveriesCount = pastOrders.filter(o => {
+    const s = o.status?.toUpperCase() || '';
+    return ['PENDING', 'CONFIRMED', 'SHIPPED'].includes(s);
+  }).length;
+  const totalSpent = pastOrders.reduce((sum, o) => {
+    const s = o.status?.toUpperCase() || '';
+    if (s !== 'CANCELLED' && s !== 'REJECTED' && s !== 'RETURNED') {
+      return sum + (Number(o.total) || 0);
+    }
+    return sum;
+  }, 0);
+
+  const formatCurrency = (amount) => {
+    return `LKR ${amount.toLocaleString()}`;
+  };
+
+  //  STYLES 
   const styles = {
     mainWrapper: {
       position: 'absolute',
@@ -765,12 +787,9 @@ export default function CustomerDashboard() {
                   <div style={styles.iconSquare('#f59e0b')}>
                     <MdShoppingCart />
                   </div>
-                  <div style={styles.trendText(true)}>
-                    <MdTrendingUp /> +2
-                  </div>
                 </div>
                 <div>
-                  <div style={styles.cardValue}>3</div>
+                  <div style={styles.cardValue}>{totalOrdersCount}</div>
                   <div style={styles.cardLabel}>Total Orders</div>
                 </div>
               </div>
@@ -781,7 +800,7 @@ export default function CustomerDashboard() {
                   </div>
                 </div>
                 <div>
-                  <div style={styles.cardValue}>6</div>
+                  <div style={styles.cardValue}>{pendingDeliveriesCount}</div>
                   <div style={styles.cardLabel}>Pending Deliveries</div>
                 </div>
               </div>
@@ -790,12 +809,9 @@ export default function CustomerDashboard() {
                   <div style={styles.iconSquare('#10b981')}>
                     <MdAttachMoney />
                   </div>
-                  <div style={styles.trendText(true)}>
-                    <MdTrendingUp /> +18%
-                  </div>
                 </div>
                 <div>
-                  <div style={styles.cardValue}>LKR 2.3M</div>
+                  <div style={styles.cardValue}>{formatCurrency(totalSpent)}</div>
                   <div style={styles.cardLabel}>Total Spent</div>
                 </div>
               </div>
@@ -826,10 +842,8 @@ export default function CustomerDashboard() {
                   onChange={(e) => setSelectedCategory(e.target.value)}
                 >
                   <option value="all">All Categories</option>
-                  <option value="Powder">Powder</option>
-                  <option value="Whole Spices">Whole Spices</option>
-                  <option value="Seeds">Seeds</option>
-                  <option value="Spice Mix">Spice Mix</option>
+                  <option value="Spices">Spices</option>
+                  <option value="Sweet">Sweet</option>
                 </select>
               </div>
 
@@ -858,12 +872,40 @@ export default function CustomerDashboard() {
                         </div>
                       </div>
                       <p style={styles.productDescription}>{product.description}</p>
+                      <div style={{ marginBottom: '15px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                        {['50g', '100g', '200g'].map(w => {
+                          const p = (product.packets || []).find(pkg => pkg.weight === w);
+                          const qty = p ? parseInt(p.quantity) : 0;
+                          return (
+                            <span key={w} style={{ fontSize: '11px', backgroundColor: '#f3f4f6', color: '#4b5563', padding: '4px 8px', borderRadius: '6px', fontWeight: '500', border: '1px solid #e5e7eb' }}>
+                              {w}: <strong style={{ color: qty > 0 ? '#10b981' : '#ef4444' }}>{qty}</strong> left
+                            </span>
+                          );
+                        })}
+                      </div>
                       <div style={styles.productFooter}>
-                        <div>
-                          <div style={styles.price}>LKR {Number(product.price).toLocaleString()}</div>
-                          <div style={styles.priceLabel}>per packet</div>
-                        </div>
                         <div style={styles.minOrder}>Min: 1 packet</div>
+                        {(() => {
+                          let minPrice = 0;
+                          const validPrices = (product.packets || [])
+                            .map(p => {
+                              if (p.price > 0) return Number(p.price);
+                              return product.price ? Math.round(Number(product.price) * (parseInt(p.weight) / 100)) : 0;
+                            })
+                            .filter(price => price > 0);
+
+                          if (validPrices.length > 0) {
+                            minPrice = Math.min(...validPrices);
+                          } else if (product.price > 0) {
+                            minPrice = Math.round(Number(product.price) * 0.5);
+                          }
+
+                          return minPrice > 0 ? (
+                            <div style={{ fontWeight: '700', color: '#111827', fontSize: '15px' }}>
+                              From LKR {minPrice.toLocaleString()}
+                            </div>
+                          ) : null;
+                        })()}
                       </div>
                       <button style={styles.addToCartButton} onClick={() => handleOpenPacketModal(product)}>
                         <MdShoppingCart /> Select Options
@@ -909,23 +951,34 @@ export default function CustomerDashboard() {
                       </ul>
                     </div>
 
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '15px', borderTop: '1px solid #f3f4f6' }}>
-                        <div>
-                          <div style={{ fontSize: '14px', color: '#6b7280' }}>Total Amount</div>
-                          <div style={{ fontSize: '18px', fontWeight: '700', color: '#111827' }}>LKR {order.total.toLocaleString()}</div>
-                        </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '15px', borderTop: '1px solid #f3f4f6' }}>
+                      <div>
+                        <div style={{ fontSize: '14px', color: '#6b7280' }}>Total Amount</div>
+                        <div style={{ fontSize: '18px', fontWeight: '700', color: '#111827' }}>LKR {order.total.toLocaleString()}</div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '10px', marginLeft: 'auto', alignItems: 'center' }}>
+                        <button
+                          style={{ ...styles.addToCartButton, width: 'auto', backgroundColor: '#3b82f6', padding: '8px 16px' }}
+                          onClick={() => {
+                            setSelectedInvoiceData(order);
+                            setShowInvoiceModal(true);
+                          }}
+                        >
+                          Download Invoice
+                        </button>
                         {(order.status?.toUpperCase() === 'DELIVERED' || order.status?.toUpperCase() === 'COMPLETED') && (
-                          <button 
-                            style={{...styles.addToCartButton, width: 'auto', backgroundColor: '#ef4444', padding: '8px 16px', marginLeft: 'auto'}}
+                          <button
+                            style={{ ...styles.addToCartButton, width: 'auto', backgroundColor: '#ef4444', padding: '8px 16px' }}
                             onClick={() => handleOpenReturnModal(order)}
                           >
                             Request Return
                           </button>
                         )}
                         {order.status?.toUpperCase() === 'RETURNED' && (
-                          <div style={{color: '#ef4444', fontWeight: '600', fontSize: '14px', marginLeft: 'auto'}}>Returned</div>
+                          <div style={{ color: '#ef4444', fontWeight: '600', fontSize: '14px' }}>Returned</div>
                         )}
                       </div>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1000,6 +1053,94 @@ export default function CustomerDashboard() {
         </div>
       )}
 
+      {/* --- CUSTOMER E-RECEIPT MODAL --- */}
+      {showInvoiceModal && selectedInvoiceData && (
+        <div style={styles.modalOverlay} onClick={() => setShowInvoiceModal(false)}>
+          <div style={{ ...styles.packetModalContent, width: '700px', backgroundColor: '#ffffff', color: '#1f2937' }} onClick={e => e.stopPropagation()}>
+            {/* Printable Area */}
+            <div id="printable-receipt" style={{ padding: '20px', fontFamily: '"Inter", sans-serif' }}>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid #e5e7eb', paddingBottom: '20px', marginBottom: '20px' }}>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: '24px', fontWeight: '800', color: '#111827' }}>
+                    Hasal Products
+                  </h2>
+                  <p style={{ margin: '5px 0 0 0', color: '#4b5563', fontSize: '14px' }}>
+                    Manufacturing & Distribution HQ
+                  </p>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <h1 style={{ margin: 0, fontSize: '28px', fontWeight: '700', color: '#374151', letterSpacing: '1px' }}>ORDER INVOICE</h1>
+                  <p style={{ margin: '5px 0 0 0', color: '#6b7280', fontSize: '14px' }}>
+                    Invoice Date: {new Date(selectedInvoiceData.date).toLocaleDateString()}<br />
+                    Invoice #: INV-{selectedInvoiceData.id}-{(new Date(selectedInvoiceData.date).getFullYear())}
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '30px' }}>
+                <div>
+                  <p style={{ margin: 0, fontSize: '12px', color: '#6b7280', fontWeight: '600', textTransform: 'uppercase' }}>Billed To:</p>
+                  <p style={{ margin: '5px 0 0 0', fontSize: '15px', fontWeight: '600', color: '#111827' }}>{user?.name}</p>
+                  <p style={{ margin: '2px 0 0 0', fontSize: '14px', color: '#4b5563' }}>{user?.email || 'Customer'}</p>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <p style={{ margin: 0, fontSize: '12px', color: '#6b7280', fontWeight: '600', textTransform: 'uppercase' }}>Order Status:</p>
+                  <p style={{ margin: '5px 0 0 0', fontSize: '15px', fontWeight: '700', color: '#10b981' }}>{selectedInvoiceData.status}</p>
+                </div>
+              </div>
+
+              <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '30px' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#f3f4f6' }}>
+                    <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', color: '#4b5563', textTransform: 'uppercase', borderBottom: '1px solid #d1d5db' }}>Item Description</th>
+                    <th style={{ padding: '12px', textAlign: 'center', fontSize: '12px', color: '#4b5563', textTransform: 'uppercase', borderBottom: '1px solid #d1d5db' }}>Quantity</th>
+                    <th style={{ padding: '12px', textAlign: 'right', fontSize: '12px', color: '#4b5563', textTransform: 'uppercase', borderBottom: '1px solid #d1d5db' }}>Unit Price (LKR)</th>
+                    <th style={{ padding: '12px', textAlign: 'right', fontSize: '12px', color: '#4b5563', textTransform: 'uppercase', borderBottom: '1px solid #d1d5db' }}>Line Total (LKR)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedInvoiceData.items?.map((item, idx) => (
+                    <tr key={idx}>
+                      <td style={{ padding: '15px 12px', fontSize: '14px', color: '#1f2937', borderBottom: '1px solid #e5e7eb' }}>{item.name} ({item.size})</td>
+                      <td style={{ padding: '15px 12px', fontSize: '14px', color: '#1f2937', textAlign: 'center', borderBottom: '1px solid #e5e7eb' }}>{item.quantity}</td>
+                      <td style={{ padding: '15px 12px', fontSize: '14px', color: '#1f2937', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>{Number(item.price).toLocaleString()}</td>
+                      <td style={{ padding: '15px 12px', fontSize: '14px', color: '#1f2937', textAlign: 'right', fontVariantNumeric: 'tabular-nums', borderBottom: '1px solid #e5e7eb' }}>{(item.quantity * item.price).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <div style={{ width: '250px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '2px solid #111827' }}>
+                    <span style={{ fontSize: '16px', fontWeight: '700', color: '#111827' }}>Grand Total</span>
+                    <span style={{ fontSize: '18px', fontWeight: '800', color: '#111827' }}>LKR {Number(selectedInvoiceData.total).toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '15px', padding: '20px', borderTop: '1px solid #e5e7eb', marginTop: '20px' }}>
+              <button style={{ padding: '10px 20px', border: '1px solid #d1d5db', backgroundColor: 'white', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', color: '#374151' }} onClick={() => setShowInvoiceModal(false)}>
+                Close
+              </button>
+              <button style={{ padding: '10px 20px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }} onClick={() => {
+                const content = document.getElementById('printable-receipt').innerHTML;
+                const original = document.body.innerHTML;
+                document.body.innerHTML = content;
+                window.print();
+                document.body.innerHTML = original;
+                window.location.reload();
+              }}>
+                Print Invoice
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showCartModal && (
         <>
           <div style={styles.modalOverlay} onClick={() => setShowCartModal(false)}></div>
@@ -1017,7 +1158,7 @@ export default function CustomerDashboard() {
                 cartItems.map(item => (
                   <div key={item.cartId} style={styles.cartItem}>
                     <div style={styles.cartItemHeader}>
-                      <div><h4 style={{ fontSize: '16px', fontWeight: '600', margin: 0 }}>{item.name}</h4><div style={{ fontSize: '13px', color: '#6b7280' }}>Powder</div></div>
+                      <div><h4 style={{ fontSize: '16px', fontWeight: '600', margin: 0 }}>{item.name}</h4><div style={{ fontSize: '13px', color: '#6b7280' }}>Spices</div></div>
                       <MdDelete color="#ef4444" style={{ cursor: 'pointer' }} onClick={() => handleRemoveItem(item.cartId)} />
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', marginBottom: '15px' }}><span style={styles.sizeTag}>{item.size}</span><span style={{ fontSize: '14px', color: '#6b7280' }}>LKR {item.price} / packet</span></div>
@@ -1086,15 +1227,15 @@ export default function CustomerDashboard() {
                 <div style={{ textAlign: 'left', marginTop: '10px' }}>
                   <div style={{ marginBottom: '10px' }}>
                     <label style={{ display: 'block', fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Full Name</label>
-                    <input type="text" value={profileFormData.full_name} onChange={e => setProfileFormData({...profileFormData, full_name: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', boxSizing: 'border-box' }} />
+                    <input type="text" value={profileFormData.full_name} onChange={e => setProfileFormData({ ...profileFormData, full_name: e.target.value })} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', boxSizing: 'border-box' }} />
                   </div>
                   <div style={{ marginBottom: '10px' }}>
                     <label style={{ display: 'block', fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Phone Number</label>
-                    <input type="text" value={profileFormData.phone_number} onChange={e => setProfileFormData({...profileFormData, phone_number: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', boxSizing: 'border-box' }} />
+                    <input type="text" value={profileFormData.phone_number} onChange={e => setProfileFormData({ ...profileFormData, phone_number: e.target.value })} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', boxSizing: 'border-box' }} />
                   </div>
                   <div style={{ marginBottom: '10px' }}>
                     <label style={{ display: 'block', fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Address</label>
-                    <input type="text" value={profileFormData.address} onChange={e => setProfileFormData({...profileFormData, address: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', boxSizing: 'border-box' }} />
+                    <input type="text" value={profileFormData.address} onChange={e => setProfileFormData({ ...profileFormData, address: e.target.value })} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', boxSizing: 'border-box' }} />
                   </div>
                 </div>
               )}
@@ -1123,20 +1264,20 @@ export default function CustomerDashboard() {
       )}
 
       {showPaymentModal && <PaymentWrapper amount={cartTotal} onClose={() => setShowPaymentModal(false)} onPaymentSuccess={handlePaymentSuccess} />}
-      
+
       {/* --- CUSTOMER RETURN MODAL --- */}
       {showReturnModal && (
         <div style={styles.modalOverlay} onClick={() => setShowReturnModal(false)}>
-          <div style={{...styles.packetModalContent, width: '450px'}} onClick={e => e.stopPropagation()}>
+          <div style={{ ...styles.packetModalContent, width: '450px' }} onClick={e => e.stopPropagation()}>
             <div style={styles.cartHeader}>
               <h3 style={{ margin: 0 }}>Request Return</h3>
               <button style={{ background: 'none', border: 'none', cursor: 'pointer' }} onClick={() => setShowReturnModal(false)}><MdClose size={24} /></button>
             </div>
-            <p style={{fontSize: '14px', color: '#6b7280', marginBottom: '20px'}}>Please provide a reason and a photo for your return request for Order #{selectedOrderForReturn?.id}:</p>
+            <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '20px' }}>Please provide a reason and a photo for your return request for Order #{selectedOrderForReturn?.id}:</p>
             <form onSubmit={handleReturnSubmit}>
-              <div style={{marginBottom: '15px'}}>
-                <label style={{display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '8px'}}>Reason for Return</label>
-                <textarea 
+              <div style={{ marginBottom: '15px' }}>
+                <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '8px' }}>Reason for Return</label>
+                <textarea
                   style={{
                     width: '100%', height: '100px', padding: '12px', borderRadius: '8px', border: '1px solid #e5e7eb', resize: 'none', fontSize: '14px', fontFamily: 'inherit'
                   }}
@@ -1146,18 +1287,18 @@ export default function CustomerDashboard() {
                   onChange={e => setReturnReason(e.target.value)}
                 />
               </div>
-              <div style={{marginBottom: '20px'}}>
-                <label style={{display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '8px'}}>Upload Photo (Optional)</label>
-                <input 
-                  type="file" 
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '8px' }}>Upload Photo (Optional)</label>
+                <input
+                  type="file"
                   accept="image/*"
                   onChange={e => setReturnImage(e.target.files[0])}
-                  style={{fontSize: '14px'}}
+                  style={{ fontSize: '14px' }}
                 />
               </div>
-              <div style={{display: 'flex', gap: '10px'}}>
-                <button type="button" style={{...styles.checkoutBtn, backgroundColor: '#6b7280', flex: 1}} onClick={() => setShowReturnModal(false)}>Cancel</button>
-                <button type="submit" style={{...styles.checkoutBtn, flex: 1}} disabled={isSubmittingReturn}>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button type="button" style={{ ...styles.checkoutBtn, backgroundColor: '#6b7280', flex: 1 }} onClick={() => setShowReturnModal(false)}>Cancel</button>
+                <button type="submit" style={{ ...styles.checkoutBtn, flex: 1 }} disabled={isSubmittingReturn}>
                   {isSubmittingReturn ? 'Submitting...' : 'Submit Request'}
                 </button>
               </div>

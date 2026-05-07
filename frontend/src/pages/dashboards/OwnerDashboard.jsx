@@ -36,11 +36,16 @@ export default function OwnerDashboard() {
   const [showAddCatalogModal, setShowAddCatalogModal] = useState(false);
   const [showEditCatalogModal, setShowEditCatalogModal] = useState(false);
   const [editingCatalogItem, setEditingCatalogItem] = useState(null);
-  const [newCatalogItem, setNewCatalogItem] = useState({ name: '', category: '', description: '', price: 0, stock_level: 0, raw_material_id: '', raw_material_quantity: 0, packets: { '50g': 0, '100g': 0, '200g': 0 } });
+  const [newCatalogItem, setNewCatalogItem] = useState({ name: '', category: '', description: '', stock_level: 0, raw_material_id: '', raw_material_quantity: 0, packets: { '50g': { quantity: 0, price: 0 }, '100g': { quantity: 0, price: 0 }, '200g': { quantity: 0, price: 0 } } });
 
   // --- STATE FOR ORDER MANAGEMENT ---
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [orderSubTab, setOrderSubTab] = useState('customer'); // 'customer' or 'purchase'
+  // DATE RANGE FILTER
+  const [poFilterStart, setPoFilterStart] = useState('');
+  const [poFilterEnd, setPoFilterEnd] = useState('');
+  const [poStartDisplay, setPoStartDisplay] = useState('');
+  const [poEndDisplay, setPoEndDisplay] = useState('');
 
   // --- STATE FOR PROFILE MODAL ---
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -56,7 +61,7 @@ export default function OwnerDashboard() {
   const [systemAuditLog, setSystemAuditLog] = useState([]);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [receiptData, setReceiptData] = useState(null);
-  
+
   // --- STATE FOR RETURN REQUESTS ---
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [selectedPOForReturn, setSelectedPOForReturn] = useState(null);
@@ -170,9 +175,9 @@ export default function OwnerDashboard() {
       console.error("Error updating return status:", err);
       alert("Failed to update return status.");
     }
-   };
+  };
 
-   // --- API FUNCTIONS: INVENTORY ---
+  // --- API FUNCTIONS: INVENTORY ---
   const fetchInventory = async () => {
     try {
       const res = await axios.get('http://localhost:5000/api/inventory');
@@ -245,7 +250,7 @@ export default function OwnerDashboard() {
     } else {
       setCart([...cart, { ...activeMaterial, quantity: qty }]);
     }
-    
+
     alert(`${activeMaterial.name} added to cart!`);
     setShowPurchaseModal(false);
     setPurchaseQty(1);
@@ -286,7 +291,7 @@ export default function OwnerDashboard() {
         ordersBySupplier[item.supplier_id].total_amount += (item.unit_cost * item.quantity);
       });
 
-      const promises = Object.values(ordersBySupplier).map(orderData => 
+      const promises = Object.values(ordersBySupplier).map(orderData =>
         axios.post('http://localhost:5000/api/suppliers/purchase', {
           ...orderData,
           payment_method: 'COD'
@@ -326,7 +331,7 @@ export default function OwnerDashboard() {
         ordersBySupplier[item.supplier_id].total_amount += (item.unit_cost * item.quantity);
       });
 
-      const promises = Object.values(ordersBySupplier).map(orderData => 
+      const promises = Object.values(ordersBySupplier).map(orderData =>
         axios.post('http://localhost:5000/api/owner-payments', {
           supplier_id: orderData.supplier_id,
           total_amount: orderData.total_amount,
@@ -363,6 +368,51 @@ export default function OwnerDashboard() {
       setPurchaseOrders(res.data || []);
     } catch (err) {
       console.error("Error fetching purchase orders:", err);
+    }
+  };
+
+  // DATE INPUT HANDLERS
+  const handlePoStartInput = (raw) => {
+    const digits = raw.replace(/[^0-9]/g, '');
+    let fmt = digits.substring(0, 4);
+    if (digits.length > 4) fmt += '/' + digits.substring(4, 6);
+    if (digits.length > 6) fmt += '/' + digits.substring(6, 8);
+    setPoStartDisplay(fmt);
+    if (digits.length === 8) {
+      const y = digits.substring(0, 4), m = digits.substring(4, 6), d = digits.substring(6, 8);
+      const mo = parseInt(m, 10), dy = parseInt(d, 10);
+      const dateStr = `${y}-${m}-${d}`;
+      const today = new Date().toISOString().split('T')[0];
+      if (mo >= 1 && mo <= 12 && dy >= 1 && dy <= 31 && dateStr <= today) {
+        setPoFilterStart(dateStr);
+        if (poFilterEnd && dateStr > poFilterEnd) { setPoFilterEnd(''); setPoEndDisplay(''); }
+      } else {
+        setPoFilterStart('');
+      }
+    } else {
+      setPoFilterStart('');
+    }
+  };
+
+  const handlePoEndInput = (raw) => {
+    if (!poFilterStart) return;
+    const digits = raw.replace(/[^0-9]/g, '');
+    let fmt = digits.substring(0, 4);
+    if (digits.length > 4) fmt += '/' + digits.substring(4, 6);
+    if (digits.length > 6) fmt += '/' + digits.substring(6, 8);
+    setPoEndDisplay(fmt);
+    if (digits.length === 8) {
+      const y = digits.substring(0, 4), m = digits.substring(4, 6), d = digits.substring(6, 8);
+      const mo = parseInt(m, 10), dy = parseInt(d, 10);
+      const dateStr = `${y}-${m}-${d}`;
+      const today = new Date().toISOString().split('T')[0];
+      if (mo >= 1 && mo <= 12 && dy >= 1 && dy <= 31 && dateStr <= today && dateStr >= poFilterStart) {
+        setPoFilterEnd(dateStr);
+      } else {
+        setPoFilterEnd('');
+      }
+    } else {
+      setPoFilterEnd('');
     }
   };
 
@@ -464,10 +514,18 @@ export default function OwnerDashboard() {
   const handleAddCatalog = async (e) => {
     e.preventDefault();
     try {
-      await axios.post('http://localhost:5000/api/products', newCatalogItem);
+      const payload = {
+        ...newCatalogItem,
+        packets: Object.keys(newCatalogItem.packets).map(w => ({
+          weight: w,
+          quantity: newCatalogItem.packets[w].quantity || 0,
+          price: newCatalogItem.packets[w].price || 0
+        }))
+      };
+      await axios.post('http://localhost:5000/api/products', payload);
       alert('Product Added to Catalog!');
       setShowAddCatalogModal(false);
-      setNewCatalogItem({ name: '', category: '', description: '', price: 0, stock_level: 0, raw_material_id: '', raw_material_quantity: 0, packets: { '50g': 0, '100g': 0, '200g': 0 } });
+      setNewCatalogItem({ name: '', category: '', description: '', stock_level: 0, raw_material_id: '', raw_material_quantity: 0, packets: { '50g': { quantity: 0, price: 0 }, '100g': { quantity: 0, price: 0 }, '200g': { quantity: 0, price: 0 } } });
       fetchCatalog();
       // Refetch inventory to show deducted stock
       fetchInventory();
@@ -495,7 +553,8 @@ export default function OwnerDashboard() {
 
   const fetchBatches = async () => {
     try {
-      const res = await axios.get('http://localhost:5000/api/production');
+      const token = localStorage.getItem('token');
+      const res = await axios.get('http://localhost:5000/api/production/grouped-orders', { headers: { Authorization: `Bearer ${token}` } });
       setBatches(res.data || []);
     } catch (err) {
       console.error("Error fetching batches:", err);
@@ -772,8 +831,8 @@ export default function OwnerDashboard() {
                 <div><h1 style={{ ...styles.pageTitle, fontSize: '22px' }}>Supplier Marketplace</h1><p style={styles.pageSubtitle}>Purchase raw materials from verified suppliers</p></div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
                   <div style={{ ...styles.statusBadge('#10b981') }}>Live Marketplace</div>
-                  <button 
-                    onClick={() => setShowCartModal(true)} 
+                  <button
+                    onClick={() => setShowCartModal(true)}
                     style={{ backgroundColor: '#3b82f6', color: 'white', padding: '8px 16px', borderRadius: '8px', fontWeight: '600', fontSize: '14px', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}
                   >
                     <MdShoppingCart size={18} /> Cart
@@ -865,10 +924,10 @@ export default function OwnerDashboard() {
               <div style={styles.tableCard}>
                 <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '20px' }}>Customer Orders (Incoming)</h3>
                 <table style={styles.table}>
-                  <thead><tr><th style={styles.th}>ID</th><th style={styles.th}>Customer</th><th style={styles.th}>Date</th><th style={styles.th}>Items Count</th><th style={styles.th}>Total</th><th style={styles.th}>Status</th><th style={styles.th}>Actions</th></tr></thead>
+                  <thead><tr><th style={styles.th}>ID</th><th style={styles.th}>Customer</th><th style={styles.th}>Date</th><th style={styles.th}>Items Count</th><th style={styles.th}>Total</th><th style={styles.th}>Status</th></tr></thead>
                   <tbody>
                     {customerOrders.length === 0 ? (
-                      <tr><td colSpan="7" style={{ ...styles.td, textAlign: 'center' }}>No customer orders found.</td></tr>
+                      <tr><td colSpan="6" style={{ ...styles.td, textAlign: 'center' }}>No customer orders found.</td></tr>
                     ) : (
                       customerOrders.map(o => (
                         <tr key={o.order_id}>
@@ -882,10 +941,6 @@ export default function OwnerDashboard() {
                               {o.status}
                             </span>
                           </td>
-                          <td style={styles.td}>
-                            {/* Confirmation is now automatic when order is placed */}
-                            <span style={{ fontSize: '11px', color: '#9ca3af' }}>Processing...</span>
-                          </td>
                         </tr>
                       ))
                     )}
@@ -894,6 +949,96 @@ export default function OwnerDashboard() {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
+
+                {/* DATE RANGE FILTER BAR */}
+                <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '20px', border: '1px solid #e5e7eb', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', display: 'flex', alignItems: 'flex-end', gap: '16px', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: '600', color: '#6b7280' }}>Start Date</label>
+                    <div style={{ position: 'relative', display: 'inline-block', width: '160px' }}>
+                      {/* Typed text input showing yyyy/mm/dd */}
+                      <input
+                        type="text"
+                        placeholder="yyyy/mm/dd"
+                        value={poStartDisplay}
+                        maxLength={10}
+                        onChange={(e) => handlePoStartInput(e.target.value)}
+                        style={{ padding: '8px 36px 8px 12px', borderRadius: '8px', border: `1px solid ${poStartDisplay.length === 10 && !poFilterStart ? '#ef4444' : '#d1d5db'}`, fontSize: '14px', color: '#1f2937', width: '100%', boxSizing: 'border-box', letterSpacing: '1px' }}
+                      />
+                      {/* Hidden date input — overlaid on the right (calendar icon only) */}
+                      <input
+                        type="date"
+                        value={poFilterStart}
+                        max={new Date().toISOString().split('T')[0]}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val) {
+                            setPoFilterStart(val);
+                            setPoStartDisplay(val.replace(/-/g, '/'));
+                            if (poFilterEnd && val > poFilterEnd) { setPoFilterEnd(''); setPoEndDisplay(''); }
+                          }
+                        }}
+                        style={{ position: 'absolute', top: 0, right: 0, width: '34px', height: '100%', opacity: 0, cursor: 'pointer', zIndex: 2 }}
+                      />
+                      {/* Calendar icon (visual only) */}
+                      <span style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', zIndex: 1, fontSize: '15px' }}>📅</span>
+                    </div>
+                    {poStartDisplay.length === 10 && !poFilterStart && (
+                      <span style={{ fontSize: '11px', color: '#ef4444' }}>Invalid date</span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: '600', color: '#6b7280' }}>End Date</label>
+                    <div style={{ position: 'relative', display: 'inline-block', width: '160px' }}>
+                      {/* Typed text input showing yyyy/mm/dd */}
+                      <input
+                        type="text"
+                        placeholder="yyyy/mm/dd"
+                        value={poEndDisplay}
+                        maxLength={10}
+                        onChange={(e) => handlePoEndInput(e.target.value)}
+                        disabled={!poFilterStart}
+                        title={!poFilterStart ? 'Please enter a valid start date first' : ''}
+                        style={{ padding: '8px 36px 8px 12px', borderRadius: '8px', border: `1px solid ${poEndDisplay.length === 10 && !poFilterEnd ? '#ef4444' : '#d1d5db'}`, fontSize: '14px', color: '#1f2937', cursor: poFilterStart ? 'text' : 'not-allowed', opacity: poFilterStart ? 1 : 0.5, width: '100%', boxSizing: 'border-box', letterSpacing: '1px' }}
+                      />
+                      {/* Hidden date input — overlaid on the right (calendar icon only) */}
+                      <input
+                        type="date"
+                        value={poFilterEnd}
+                        min={poFilterStart || undefined}
+                        max={new Date().toISOString().split('T')[0]}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val) {
+                            setPoFilterEnd(val);
+                            setPoEndDisplay(val.replace(/-/g, '/'));
+                          }
+                        }}
+                        disabled={!poFilterStart}
+                        style={{ position: 'absolute', top: 0, right: 0, width: '34px', height: '100%', opacity: 0, cursor: poFilterStart ? 'pointer' : 'not-allowed', zIndex: 2 }}
+                      />
+                      {/* Calendar icon (visual only) */}
+                      <span style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', zIndex: 1, fontSize: '15px', opacity: poFilterStart ? 1 : 0.4 }}>📅</span>
+                    </div>
+                    {poEndDisplay.length === 10 && !poFilterEnd && (
+                      <span style={{ fontSize: '11px', color: '#ef4444' }}>Invalid or before start date</span>
+                    )}
+                  </div>
+                  {(poStartDisplay || poEndDisplay) && (
+                    <button
+                      onClick={() => { setPoFilterStart(''); setPoFilterEnd(''); setPoStartDisplay(''); setPoEndDisplay(''); }}
+                      style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#f3f4f6', color: '#374151', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
+                    >
+                      Clear Filter
+                    </button>
+                  )}
+                  {poFilterStart && poFilterEnd && (
+                    <div style={{ fontSize: '12px', color: '#6b7280', marginLeft: 'auto', alignSelf: 'center' }}>
+                      Showing orders from <strong>{poFilterStart.replace(/-/g, '/')}</strong> to <strong>{poFilterEnd.replace(/-/g, '/')}</strong>
+                    </div>
+                  )}
+                </div>
+
+
                 {/* ACTIVE PURCHASE ORDERS */}
                 <div style={styles.tableCard}>
                   <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '20px', color: '#f59e0b' }}>Active Purchase Orders</h3>
@@ -906,42 +1051,32 @@ export default function OwnerDashboard() {
                         <th style={styles.th}>Date</th>
                         <th style={styles.th}>Total</th>
                         <th style={styles.th}>Status</th>
-                        <th style={styles.th}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {purchaseOrders.filter(po => !['Delivered', 'Rejected'].includes(po.status)).length === 0 ? (
-                        <tr><td colSpan="7" style={{ ...styles.td, textAlign: 'center' }}>No active purchase orders.</td></tr>
-                      ) : (
-                        purchaseOrders.filter(po => !['Delivered', 'Rejected'].includes(po.status)).map(po => (
+                      {(() => {
+                        const activePOs = purchaseOrders.filter(po => !['Delivered', 'Rejected'].includes(po.status)).filter(po => {
+                          if (!po.order_date) return true;
+                          const d = new Date(po.order_date);
+                          const poDateStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+                          if (poFilterStart && poDateStr < poFilterStart) return false;
+                          if (poFilterEnd && poDateStr > poFilterEnd) return false;
+                          return true;
+                        });
+                        if (activePOs.length === 0) return (
+                          <tr><td colSpan="6" style={{ ...styles.td, textAlign: 'center' }}>{poFilterStart || poFilterEnd ? 'No active purchase orders found in the selected date range.' : 'No active purchase orders.'}</td></tr>
+                        );
+                        return activePOs.map(po => (
                           <tr key={po.po_id}>
                             <td style={styles.td}>#{po.po_id}</td>
                             <td style={styles.td}>{po.company_name}</td>
                             <td style={styles.td}>{po.items || 'N/A'}</td>
-                            <td style={styles.td}>{new Date(po.order_date).toLocaleDateString()}</td>
+                            <td style={styles.td}>{po.order_date ? (() => { const d = new Date(po.order_date); const y = d.getUTCFullYear(); const m = String(d.getUTCMonth() + 1).padStart(2, '0'); const day = String(d.getUTCDate()).padStart(2, '0'); return `${y}/${m}/${day}`; })() : 'N/A'}</td>
                             <td style={styles.td}>LKR {Number(po.total_amount).toLocaleString()}</td>
-                            <td style={styles.td}><span style={styles.statusBadge(po.status === 'Shipped' ? '#8b5cf6' : po.status === 'Confirmed' ? '#3b82f6' : po.status === 'Accepted' ? '#10b981' : po.status === 'Rejected' ? '#ef4444' : po.status === 'Paid' ? '#3b82f6' : '#f59e0b')}>{po.status}</span></td>
-                            <td style={styles.td}>
-                              {po.status === 'Rejected' && po.denial_reason && (
-                                <div style={{ fontSize: '12px', color: '#ef4444', marginBottom: '5px' }}>
-                                  <strong>Reason:</strong> {po.denial_reason}
-                                </div>
-                              )}
-                              <button
-                                style={{ 
-                                  ...styles.primaryBtn, 
-                                  backgroundColor: '#28a745', 
-                                  filter: (!['Shipped', 'Confirmed', 'Accepted', 'Paid'].includes(po.status)) ? 'grayscale(100%) opacity(50%)' : 'none' 
-                                }}
-                                onClick={() => handleReceive(po.po_id)}
-                                disabled={!['Shipped', 'Confirmed', 'Accepted', 'Paid'].includes(po.status)}
-                              >
-                                Received
-                              </button>
-                            </td>
+                            <td style={styles.td}><span style={styles.statusBadge(po.status === 'Shipped' ? '#8b5cf6' : po.status === 'Confirmed' ? '#3b82f6' : po.status === 'Rejected' ? '#ef4444' : '#f59e0b')}>{po.status}</span></td>
                           </tr>
-                        ))
-                      )}
+                        ));
+                      })()}
                     </tbody>
                   </table>
                 </div>
@@ -962,15 +1097,24 @@ export default function OwnerDashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {purchaseOrders.filter(po => ['Delivered', 'Rejected'].includes(po.status)).length === 0 ? (
-                        <tr><td colSpan="7" style={{ ...styles.td, textAlign: 'center' }}>No past purchase orders.</td></tr>
-                      ) : (
-                        purchaseOrders.filter(po => ['Delivered', 'Rejected'].includes(po.status)).map(po => (
+                      {(() => {
+                        const pastPOs = purchaseOrders.filter(po => ['Delivered', 'Rejected'].includes(po.status)).filter(po => {
+                          if (!po.order_date) return true;
+                          const d = new Date(po.order_date);
+                          const poDateStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+                          if (poFilterStart && poDateStr < poFilterStart) return false;
+                          if (poFilterEnd && poDateStr > poFilterEnd) return false;
+                          return true;
+                        });
+                        if (pastPOs.length === 0) return (
+                          <tr><td colSpan="7" style={{ ...styles.td, textAlign: 'center' }}>{poFilterStart || poFilterEnd ? 'No past purchase orders found in the selected date range.' : 'No past purchase orders.'}</td></tr>
+                        );
+                        return pastPOs.map(po => (
                           <tr key={po.po_id}>
                             <td style={styles.td}>#{po.po_id}</td>
                             <td style={styles.td}>{po.company_name}</td>
                             <td style={styles.td}>{po.items || 'N/A'}</td>
-                            <td style={styles.td}>{new Date(po.order_date).toLocaleDateString()}</td>
+                            <td style={styles.td}>{po.order_date ? (() => { const d = new Date(po.order_date); const y = d.getUTCFullYear(); const m = String(d.getUTCMonth() + 1).padStart(2, '0'); const day = String(d.getUTCDate()).padStart(2, '0'); return `${y}/${m}/${day}`; })() : 'N/A'}</td>
                             <td style={styles.td}>LKR {Number(po.total_amount).toLocaleString()}</td>
                             <td style={styles.td}>
                               <span style={styles.statusBadge(po.status === 'Rejected' ? '#ef4444' : '#10b981')}>
@@ -985,14 +1129,14 @@ export default function OwnerDashboard() {
                             <td style={styles.td}>
                               {po.status === 'Delivered' && (
                                 <div style={{ display: 'flex', gap: '8px' }}>
-                                  <button 
-                                    style={{...styles.primaryBtn, backgroundColor: '#3b82f6', padding: '6px 14px', fontSize: '12px'}} 
+                                  <button
+                                    style={{ ...styles.primaryBtn, backgroundColor: '#3b82f6', padding: '6px 14px', fontSize: '12px' }}
                                     onClick={() => handleViewReceipt(po.po_id)}
                                   >
                                     View Receipt
                                   </button>
-                                  <button 
-                                    style={{...styles.primaryBtn, backgroundColor: '#ef4444', padding: '6px 14px', fontSize: '12px'}} 
+                                  <button
+                                    style={{ ...styles.primaryBtn, backgroundColor: '#ef4444', padding: '6px 14px', fontSize: '12px' }}
                                     onClick={() => handleOpenReturnModal(po)}
                                   >
                                     Request Return
@@ -1001,8 +1145,8 @@ export default function OwnerDashboard() {
                               )}
                             </td>
                           </tr>
-                        ))
-                      )}
+                        ));
+                      })()}
                     </tbody>
                   </table>
                 </div>
@@ -1020,9 +1164,9 @@ export default function OwnerDashboard() {
             </div>
             <div style={styles.tableCard}>
               <table style={styles.table}>
-                <thead><tr><th style={styles.th}>ID</th><th style={styles.th}>Name</th><th style={styles.th}>Category</th><th style={styles.th}>Packets</th><th style={styles.th}>Stock (Bulk)</th><th style={styles.th}>Price</th><th style={styles.th}>Actions</th></tr></thead>
+                <thead><tr><th style={styles.th}>ID</th><th style={styles.th}>Name</th><th style={styles.th}>Category</th><th style={styles.th}>Packets</th><th style={styles.th}>Actions</th></tr></thead>
                 <tbody>
-                  {catalogList.length === 0 ? <tr><td colSpan="6" style={{ ...styles.td, textAlign: 'center' }}>No products in the catalog</td></tr> : catalogList.map(item => (
+                  {catalogList.length === 0 ? <tr><td colSpan="5" style={{ ...styles.td, textAlign: 'center' }}>No products in the catalog</td></tr> : catalogList.map(item => (
                     <tr key={item.product_id}>
                       <td style={styles.td}>{item.product_id}</td>
                       <td style={styles.td}><div style={{ fontWeight: '600', color: '#1f2937' }}>{item.name}</div><div style={{ fontSize: '12px', color: '#6b7280', maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.description}</div></td>
@@ -1030,7 +1174,7 @@ export default function OwnerDashboard() {
                       <td style={styles.td}>
                         <div style={{ fontSize: '11px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                           {item.packets && item.packets.length > 0 ? (
-                            item.packets.map(p => (
+                            [...item.packets].sort((a, b) => parseInt(a.weight) - parseInt(b.weight)).map(p => (
                               <span key={p.weight} style={{ backgroundColor: '#f3f4f6', padding: '1px 5px', borderRadius: '3px' }}>
                                 {p.weight}: <strong>{p.quantity}</strong>
                               </span>
@@ -1040,11 +1184,22 @@ export default function OwnerDashboard() {
                           )}
                         </div>
                       </td>
-                      <td style={styles.td}>{item.stock_level} kg</td>
-                      <td style={styles.td}>LKR {Number(item.price).toLocaleString()}</td>
                       <td style={styles.td}>
                         <div style={{ display: 'flex', gap: '10px' }}>
-                          <MdEdit style={{ color: '#6b7280', cursor: 'pointer' }} size={18} onClick={() => { setEditingCatalogItem(item); setShowEditCatalogModal(true); }} />
+                          <MdEdit style={{ color: '#6b7280', cursor: 'pointer' }} size={18} onClick={() => {
+                            const initializedItem = { ...item };
+                            initializedItem.packets = ['50g', '100g', '200g'].map(w => {
+                              const existing = (item.packets || []).find(p => p.weight === w);
+                              const price = existing && existing.price > 0 ? existing.price : (item.price ? Math.round(item.price * (parseInt(w) / 100)) : 0);
+                              return {
+                                weight: w,
+                                quantity: existing ? existing.quantity : 0,
+                                price: price
+                              };
+                            });
+                            setEditingCatalogItem(initializedItem);
+                            setShowEditCatalogModal(true);
+                          }} />
                           <MdDelete style={{ color: '#ef4444', cursor: 'pointer' }} size={18} onClick={() => handleDeleteCatalog(item.product_id)} />
                         </div>
                       </td>
@@ -1067,10 +1222,10 @@ export default function OwnerDashboard() {
             </div>
             <div style={styles.tableCard}>
               <table style={styles.table}>
-                <thead><tr><th style={styles.th}>ID</th><th style={styles.th}>Name</th><th style={styles.th}>Category</th><th style={styles.th}>Stock</th><th style={styles.th}>Unit</th><th style={styles.th}>Price</th><th style={styles.th}>Status</th><th style={styles.th}>Actions</th></tr></thead>
+                <thead><tr><th style={styles.th}>ID</th><th style={styles.th}>Name</th><th style={styles.th}>Category</th><th style={styles.th}>Stock</th><th style={styles.th}>Unit</th><th style={styles.th}>Status</th><th style={styles.th}>Actions</th></tr></thead>
                 <tbody>
                   {inventoryList.map(item => (
-                    <tr key={item.inventory_id}><td style={styles.td}>{item.inventory_id}</td><td style={styles.td}>{item.name}</td><td style={styles.td}>{item.category}</td><td style={styles.td}>{item.stock}</td><td style={styles.td}>{item.unit}</td><td style={styles.td}>LKR {Number(item.price).toLocaleString()}</td><td style={styles.td}><span style={styles.statusBadge('#10b981')}>{item.status || 'In Stock'}</span></td><td style={styles.td}><MdEdit style={{ color: '#6b7280', cursor: 'pointer' }} onClick={() => { setEditingInvItem(item); setShowEditInvModal(true); }} /></td></tr>
+                    <tr key={item.inventory_id}><td style={styles.td}>{item.inventory_id}</td><td style={styles.td}>{item.name}</td><td style={styles.td}>{item.category}</td><td style={styles.td}>{item.stock}</td><td style={styles.td}>{item.unit}</td><td style={styles.td}><span style={styles.statusBadge('#10b981')}>{item.status || 'In Stock'}</span></td><td style={styles.td}><MdEdit style={{ color: '#6b7280', cursor: 'pointer' }} onClick={() => { setEditingInvItem(item); setShowEditInvModal(true); }} /></td></tr>
                   ))}
                 </tbody>
               </table>
@@ -1146,43 +1301,43 @@ export default function OwnerDashboard() {
           <div style={styles.portalContainer}>
             <div style={styles.portalHeader}>
               <h2 style={styles.portalTitle}>Customer Return Requests</h2>
-              <button style={{...styles.addButton, width: 'auto', padding: '10px 20px'}} onClick={fetchCustomerReturns}>
+              <button style={{ ...styles.addButton, width: 'auto', padding: '10px 20px' }} onClick={fetchCustomerReturns}>
                 <MdTimer size={18} /> Refresh
               </button>
             </div>
-            
-            <div style={{...styles.tableContainer, marginTop: '20px'}}>
-              <table style={{width: '100%', borderCollapse: 'collapse'}}>
+
+            <div style={{ ...styles.tableContainer, marginTop: '20px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
-                  <tr style={{borderBottom: '2px solid #f3f4f6', textAlign: 'left'}}>
-                    <th style={{padding: '15px', fontSize: '14px', color: '#6b7280'}}>Order ID</th>
-                    <th style={{padding: '15px', fontSize: '14px', color: '#6b7280'}}>Customer</th>
-                    <th style={{padding: '15px', fontSize: '14px', color: '#6b7280'}}>Reason</th>
-                    <th style={{padding: '15px', fontSize: '14px', color: '#6b7280'}}>Photo</th>
-                    <th style={{padding: '15px', fontSize: '14px', color: '#6b7280'}}>Date</th>
-                    <th style={{padding: '15px', fontSize: '14px', color: '#6b7280'}}>Status</th>
-                    <th style={{padding: '15px', fontSize: '14px', color: '#6b7280'}}>Actions</th>
+                  <tr style={{ borderBottom: '2px solid #f3f4f6', textAlign: 'left' }}>
+                    <th style={{ padding: '15px', fontSize: '14px', color: '#6b7280' }}>Order ID</th>
+                    <th style={{ padding: '15px', fontSize: '14px', color: '#6b7280' }}>Customer</th>
+                    <th style={{ padding: '15px', fontSize: '14px', color: '#6b7280' }}>Reason</th>
+                    <th style={{ padding: '15px', fontSize: '14px', color: '#6b7280' }}>Photo</th>
+                    <th style={{ padding: '15px', fontSize: '14px', color: '#6b7280' }}>Date</th>
+                    <th style={{ padding: '15px', fontSize: '14px', color: '#6b7280' }}>Status</th>
+                    <th style={{ padding: '15px', fontSize: '14px', color: '#6b7280' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {customerReturns.length === 0 ? (
-                    <tr><td colSpan="7" style={{padding: '40px', textAlign: 'center', color: '#9ca3af'}}>No return requests found.</td></tr>
+                    <tr><td colSpan="7" style={{ padding: '40px', textAlign: 'center', color: '#9ca3af' }}>No return requests found.</td></tr>
                   ) : (
                     customerReturns.map(ret => (
-                      <tr key={ret.return_id} style={{borderBottom: '1px solid #f3f4f6'}}>
+                      <tr key={ret.return_id} style={{ borderBottom: '1px solid #f3f4f6' }}>
                         {console.log('Current item status:', ret.status)}
-                        <td style={{padding: '15px', fontWeight: '600'}}>#{ret.order_id}</td>
-                        <td style={{padding: '15px'}}>{ret.customer_name}</td>
-                        <td style={{padding: '15px', maxWidth: '250px'}}>{ret.reason}</td>
-                        <td style={{padding: '15px'}}>
+                        <td style={{ padding: '15px', fontWeight: '600' }}>#{ret.order_id}</td>
+                        <td style={{ padding: '15px' }}>{ret.customer_name}</td>
+                        <td style={{ padding: '15px', maxWidth: '250px' }}>{ret.reason}</td>
+                        <td style={{ padding: '15px' }}>
                           {ret.image_url ? (
                             <a href={`http://localhost:5000${ret.image_url}`} target="_blank" rel="noreferrer">
-                              <img src={`http://localhost:5000${ret.image_url}`} alt="Return" style={{width: '50px', height: '50px', borderRadius: '4px', objectFit: 'cover'}} />
+                              <img src={`http://localhost:5000${ret.image_url}`} alt="Return" style={{ width: '50px', height: '50px', borderRadius: '4px', objectFit: 'cover' }} />
                             </a>
                           ) : 'No Photo'}
                         </td>
-                        <td style={{padding: '15px'}}>{new Date(ret.request_date).toLocaleDateString()}</td>
-                        <td style={{padding: '15px'}}>
+                        <td style={{ padding: '15px' }}>{new Date(ret.request_date).toLocaleDateString()}</td>
+                        <td style={{ padding: '15px' }}>
                           <span style={{
                             padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600',
                             backgroundColor: ret.status?.toUpperCase() === 'PENDING' ? '#fef3c7' : (ret.status?.toUpperCase() === 'APPROVED' ? '#ecfdf5' : '#fef2f2'),
@@ -1191,19 +1346,19 @@ export default function OwnerDashboard() {
                             {ret.status}
                           </span>
                         </td>
-                        <td style={{padding: '15px'}}>
+                        <td style={{ padding: '15px' }}>
                           {ret.status?.toUpperCase() === 'PENDING' && (
-                            <div style={{display: 'flex', gap: '8px'}}>
-                              <button 
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button
                                 onClick={() => handleUpdateCustomerReturnStatus(ret.return_id, 'APPROVED')}
-                                style={{backgroundColor: '#10b981', color: 'white', border: 'none', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer'}}
+                                style={{ backgroundColor: '#10b981', color: 'white', border: 'none', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer' }}
                                 title="Accept"
                               >
                                 <MdCheckCircle size={18} />
                               </button>
-                              <button 
+                              <button
                                 onClick={() => handleUpdateCustomerReturnStatus(ret.return_id, 'REJECTED')}
-                                style={{backgroundColor: '#ef4444', color: 'white', border: 'none', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer'}}
+                                style={{ backgroundColor: '#ef4444', color: 'white', border: 'none', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer' }}
                                 title="Reject"
                               >
                                 <MdCancel size={18} />
@@ -1242,120 +1397,120 @@ export default function OwnerDashboard() {
 
             {reportSubTab === 'overview' ? (
               <>
-            {/* Top Stats for Reports */}
-            <div style={{ ...styles.statsGrid, gridTemplateColumns: 'repeat(3, 1fr)', marginBottom: '40px' }}>
-              <div style={styles.invStatCard}><div style={{ ...styles.statIconBox('#10b981'), marginBottom: 0, borderRadius: '10px', width: '45px', height: '45px', fontSize: '22px' }}><MdTrendingUp /></div><div><div style={{ fontSize: '12px', color: '#6b7280' }}>Total Revenue</div><div style={{ fontSize: '20px', fontWeight: '700' }}>LKR {Number(financialSummary.totalRevenue).toLocaleString()}</div></div></div>
-              <div style={styles.invStatCard}><div style={{ ...styles.statIconBox('#ef4444'), marginBottom: 0, borderRadius: '10px', width: '45px', height: '45px', fontSize: '22px' }}><MdAttachMoney /></div><div><div style={{ fontSize: '12px', color: '#6b7280' }}>Total Expenses</div><div style={{ fontSize: '20px', fontWeight: '700' }}>LKR {Number(financialSummary.totalExpenses).toLocaleString()}</div></div></div>
-              <div style={styles.invStatCard}><div style={{ ...styles.statIconBox('#f59e0b'), marginBottom: 0, borderRadius: '10px', width: '45px', height: '45px', fontSize: '22px' }}><MdShowChart /></div><div><div style={{ fontSize: '12px', color: '#6b7280' }}>Net Profit</div><div style={{ fontSize: '20px', fontWeight: '700' }}>LKR {Number(financialSummary.netProfit).toLocaleString()}</div></div></div>
-            </div>
+                {/* Top Stats for Reports */}
+                <div style={{ ...styles.statsGrid, gridTemplateColumns: 'repeat(3, 1fr)', marginBottom: '40px' }}>
+                  <div style={styles.invStatCard}><div style={{ ...styles.statIconBox('#10b981'), marginBottom: 0, borderRadius: '10px', width: '45px', height: '45px', fontSize: '22px' }}><MdTrendingUp /></div><div><div style={{ fontSize: '12px', color: '#6b7280' }}>Total Revenue</div><div style={{ fontSize: '20px', fontWeight: '700' }}>LKR {Number(financialSummary.totalRevenue).toLocaleString()}</div></div></div>
+                  <div style={styles.invStatCard}><div style={{ ...styles.statIconBox('#ef4444'), marginBottom: 0, borderRadius: '10px', width: '45px', height: '45px', fontSize: '22px' }}><MdAttachMoney /></div><div><div style={{ fontSize: '12px', color: '#6b7280' }}>Total Expenses</div><div style={{ fontSize: '20px', fontWeight: '700' }}>LKR {Number(financialSummary.totalExpenses).toLocaleString()}</div></div></div>
+                  <div style={styles.invStatCard}><div style={{ ...styles.statIconBox('#f59e0b'), marginBottom: 0, borderRadius: '10px', width: '45px', height: '45px', fontSize: '22px' }}><MdShowChart /></div><div><div style={{ fontSize: '12px', color: '#6b7280' }}>Net Profit</div><div style={{ fontSize: '20px', fontWeight: '700' }}>LKR {Number(financialSummary.netProfit).toLocaleString()}</div></div></div>
+                </div>
 
-            <div style={styles.chartGrid}>
-              {/* Sales by Product Bar Chart */}
-              <div style={styles.chartCard}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                  <h3 style={{ fontSize: '16px', fontWeight: '600' }}>Sales by Product (KGs)</h3>
-                  <MdAssessment color="#6b7280" />
-                </div>
-                <div style={{ ...styles.barChartContainer, marginTop: '20px' }}>
-                  {salesByProduct.length === 0 ? (
-                    <div style={{ width: '100%', textAlign: 'center', color: '#9ca3af', marginBottom: '100px' }}>No sales data available</div>
-                  ) : (
-                    salesByProduct.slice(0, 7).map((item, idx) => {
-                      const maxQty = Math.max(...salesByProduct.map(s => parseFloat(s.total_quantity)));
-                      const height = (parseFloat(item.total_quantity) / maxQty) * 200;
-                      return (
-                        <div key={idx} style={styles.barGroup}>
-                          <div style={{ fontSize: '10px', fontWeight: '600', color: '#4b5563' }}>{item.total_quantity}kg</div>
-                          <div style={styles.bar(`${height}px`, idx % 2 === 0 ? '#f59e0b' : '#fbbf24')}></div>
-                          <div style={{ fontSize: '10px', color: '#6b7280', width: '40px', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={item.name}>
-                            {item.name}
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-
-              {/* Inventory Distribution Pie Chart */}
-              <div style={styles.chartCard}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                  <h3 style={{ fontSize: '16px', fontWeight: '600' }}>Raw Material Inventory</h3>
-                  <MdInventory color="#6b7280" />
-                </div>
-                {inventoryDistribution.length === 0 ? (
-                  <div style={{ height: '220px', display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#9ca3af' }}>No inventory data available</div>
-                ) : (
-                  <>
-                    <div style={{ 
-                      ...styles.pieChart,
-                      background: `conic-gradient(
-                        ${['#f59e0b', '#fbbf24', '#fcd34d', '#10b981', '#3b82f6', '#ef4444', '#1f2937']
-                          .map((color, i) => {
-                            const total = inventoryDistribution.reduce((acc, curr) => acc + parseFloat(curr.stock), 0);
-                            const prevStocks = inventoryDistribution.slice(0, i).reduce((acc, curr) => acc + parseFloat(curr.stock), 0);
-                            const currentStock = parseFloat(inventoryDistribution[i]?.stock || 0);
-                            const startPercent = (prevStocks / total) * 100;
-                            const endPercent = ((prevStocks + currentStock) / total) * 100;
-                            return `${color} ${startPercent}% ${endPercent}%`;
-                          }).filter(Boolean).join(', ')
-                        }
-                      )`
-                    }}></div>
-                    <div style={styles.legend}>
-                      {inventoryDistribution.slice(0, 5).map((item, i) => (
-                        <div key={i} style={styles.legendItem('#f59e0b')}>
-                          <div style={styles.legendDot(['#f59e0b', '#fbbf24', '#fcd34d', '#10b981', '#3b82f6'][i])}></div>
-                          <span>{item.name} ({item.stock}kg)</span>
-                        </div>
-                      ))}
+                <div style={styles.chartGrid}>
+                  {/* Sales by Product Bar Chart */}
+                  <div style={styles.chartCard}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                      <h3 style={{ fontSize: '16px', fontWeight: '600' }}>Sales by Product (KGs)</h3>
+                      <MdAssessment color="#6b7280" />
                     </div>
-                  </>
-                )}
-              </div>
-            </div>
+                    <div style={{ ...styles.barChartContainer, marginTop: '20px' }}>
+                      {salesByProduct.length === 0 ? (
+                        <div style={{ width: '100%', textAlign: 'center', color: '#9ca3af', marginBottom: '100px' }}>No sales data available</div>
+                      ) : (
+                        salesByProduct.slice(0, 7).map((item, idx) => {
+                          const maxQty = Math.max(...salesByProduct.map(s => parseFloat(s.total_quantity)));
+                          const height = (parseFloat(item.total_quantity) / maxQty) * 200;
+                          return (
+                            <div key={idx} style={styles.barGroup}>
+                              <div style={{ fontSize: '10px', fontWeight: '600', color: '#4b5563' }}>{item.total_quantity}kg</div>
+                              <div style={styles.bar(`${height}px`, idx % 2 === 0 ? '#f59e0b' : '#fbbf24')}></div>
+                              <div style={{ fontSize: '10px', color: '#6b7280', width: '40px', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={item.name}>
+                                {item.name}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
 
-            {/* Sales Trends Table/List */}
-            <div style={{ ...styles.tableCard, marginTop: '30px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <h3 style={{ fontSize: '18px', fontWeight: '600' }}>Recent Revenue Trends (Last 30 Days)</h3>
-                <div style={{ fontSize: '12px', color: '#6b7280' }}>Grouped by Date</div>
-              </div>
-              <table style={styles.table}>
-                <thead>
-                  <tr>
-                    <th style={styles.th}>Date</th>
-                    <th style={styles.th}>Daily Revenue</th>
-                    <th style={styles.th}>Performance</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {orderTrends.length === 0 ? (
-                    <tr><td colSpan="3" style={{ ...styles.td, textAlign: 'center' }}>No recent trends found.</td></tr>
-                  ) : (
-                    orderTrends.map((trend, i) => (
-                      <tr key={i}>
-                        <td style={styles.td}>{new Date(trend.date).toLocaleDateString()}</td>
-                        <td style={{ ...styles.td, fontWeight: '700' }}>LKR {Number(trend.revenue).toLocaleString()}</td>
-                        <td style={styles.td}>
-                          <div style={{ width: '100px', height: '8px', backgroundColor: '#f3f4f6', borderRadius: '4px', position: 'relative' }}>
-                            <div style={{ 
-                              position: 'absolute', 
-                              left: 0, 
-                              top: 0, 
-                              height: '100%', 
-                              backgroundColor: '#10b981', 
-                              borderRadius: '4px',
-                              width: `${Math.min(100, (parseFloat(trend.revenue) / Math.max(...orderTrends.map(t => parseFloat(t.revenue)))) * 100)}%` 
-                            }}></div>
-                          </div>
-                        </td>
+                  {/* Inventory Distribution Pie Chart */}
+                  <div style={styles.chartCard}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                      <h3 style={{ fontSize: '16px', fontWeight: '600' }}>Raw Material Inventory</h3>
+                      <MdInventory color="#6b7280" />
+                    </div>
+                    {inventoryDistribution.length === 0 ? (
+                      <div style={{ height: '220px', display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#9ca3af' }}>No inventory data available</div>
+                    ) : (
+                      <>
+                        <div style={{
+                          ...styles.pieChart,
+                          background: `conic-gradient(
+                        ${['#f59e0b', '#fbbf24', '#fcd34d', '#10b981', '#3b82f6', '#ef4444', '#1f2937']
+                              .map((color, i) => {
+                                const total = inventoryDistribution.reduce((acc, curr) => acc + parseFloat(curr.stock), 0);
+                                const prevStocks = inventoryDistribution.slice(0, i).reduce((acc, curr) => acc + parseFloat(curr.stock), 0);
+                                const currentStock = parseFloat(inventoryDistribution[i]?.stock || 0);
+                                const startPercent = (prevStocks / total) * 100;
+                                const endPercent = ((prevStocks + currentStock) / total) * 100;
+                                return `${color} ${startPercent}% ${endPercent}%`;
+                              }).filter(Boolean).join(', ')
+                            }
+                      )`
+                        }}></div>
+                        <div style={styles.legend}>
+                          {inventoryDistribution.slice(0, 5).map((item, i) => (
+                            <div key={i} style={styles.legendItem('#f59e0b')}>
+                              <div style={styles.legendDot(['#f59e0b', '#fbbf24', '#fcd34d', '#10b981', '#3b82f6'][i])}></div>
+                              <span>{item.name} ({item.stock}kg)</span>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Sales Trends Table/List */}
+                <div style={{ ...styles.tableCard, marginTop: '30px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                    <h3 style={{ fontSize: '18px', fontWeight: '600' }}>Recent Revenue Trends (Last 30 Days)</h3>
+                    <div style={{ fontSize: '12px', color: '#6b7280' }}>Grouped by Date</div>
+                  </div>
+                  <table style={styles.table}>
+                    <thead>
+                      <tr>
+                        <th style={styles.th}>Date</th>
+                        <th style={styles.th}>Daily Revenue</th>
+                        <th style={styles.th}>Performance</th>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                    </thead>
+                    <tbody>
+                      {orderTrends.length === 0 ? (
+                        <tr><td colSpan="3" style={{ ...styles.td, textAlign: 'center' }}>No recent trends found.</td></tr>
+                      ) : (
+                        orderTrends.map((trend, i) => (
+                          <tr key={i}>
+                            <td style={styles.td}>{new Date(trend.date).toLocaleDateString()}</td>
+                            <td style={{ ...styles.td, fontWeight: '700' }}>LKR {Number(trend.revenue).toLocaleString()}</td>
+                            <td style={styles.td}>
+                              <div style={{ width: '100px', height: '8px', backgroundColor: '#f3f4f6', borderRadius: '4px', position: 'relative' }}>
+                                <div style={{
+                                  position: 'absolute',
+                                  left: 0,
+                                  top: 0,
+                                  height: '100%',
+                                  backgroundColor: '#10b981',
+                                  borderRadius: '4px',
+                                  width: `${Math.min(100, (parseFloat(trend.revenue) / Math.max(...orderTrends.map(t => parseFloat(t.revenue)))) * 100)}%`
+                                }}></div>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </>
             ) : (
               <div style={styles.tableCard}>
@@ -1442,61 +1597,79 @@ export default function OwnerDashboard() {
             <div style={{ ...styles.statsGrid, gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: '40px' }}>
               {[
                 { l: 'Total Batches', v: batches.length, i: <MdFactory />, c: '#f59e0b' },
-                { l: 'To Produce', v: batches.filter(b => b.status === 'To Produce').length, i: <MdAccessTime />, c: '#eab308' },
-                { l: 'In Process', v: batches.filter(b => b.status === 'In Process').length, i: <MdArrowForward />, c: '#f97316' },
-                { l: 'Completed', v: batches.filter(b => b.status === 'Completed').length, i: <MdCheckCircle />, c: '#10b981' }
+                { l: 'To Produce', v: batches.filter(b => b?.status === 'To Produce').length, i: <MdAccessTime />, c: '#eab308' },
+                { l: 'In Process', v: batches.filter(b => b?.status === 'In Process').length, i: <MdArrowForward />, c: '#f97316' },
+                { l: 'Completed', v: batches.filter(b => b?.status === 'Completed' || b?.status === 'Ready for Delivery').length, i: <MdCheckCircle />, c: '#10b981' }
               ].map((s, i) => (
                 <div key={i} style={styles.invStatCard}><div style={{ ...styles.statIconBox(s.c), marginBottom: 0, borderRadius: '10px', width: '45px', height: '45px', fontSize: '22px' }}>{s.i}</div><div><div style={{ fontSize: '12px', color: '#6b7280' }}>{s.l}</div><div style={{ fontSize: '20px', fontWeight: '700' }}>{s.v}</div></div></div>
               ))}
             </div>
 
             {/* Kanban Board */}
-            <div style={styles.prodGrid}>
-              {/* Column 1: To Produce */}
-              <div style={styles.prodCol('#fefce8')}>
-                <div style={styles.prodColHeader('#a16207')}><div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><MdAccessTime /> To Produce</div><span style={{ backgroundColor: '#a16207', color: 'white', padding: '2px 8px', borderRadius: '12px', fontSize: '12px' }}>{batches.filter(b => b.status === 'To Produce').length}</span></div>
-                {batches.filter(b => b.status === 'To Produce').map(batch => (
-                  <div key={batch.batch_id} style={styles.prodCard}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-                      <h4 style={{ margin: 0 }}>
-                        {batch.product_name} {batch.packet_size && `(${batch.packet_size})`}
-                      </h4>
-                      <span style={styles.prodTag('#eab308', 'white')}>To Produce</span>
+            {batches.length === 0 ? (
+              <div style={{ padding: '20px', color: '#6b7280' }}>No production records found</div>
+            ) : (
+              <div style={styles.prodGrid}>
+                {/* Column 1: To Produce */}
+                <div style={styles.prodCol('#fefce8')}>
+                  <div style={styles.prodColHeader('#a16207')}><div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><MdAccessTime /> To Produce</div><span style={{ backgroundColor: '#a16207', color: 'white', padding: '2px 8px', borderRadius: '12px', fontSize: '12px' }}>{batches.filter(b => b?.status === 'To Produce').length}</span></div>
+                  {batches.filter(b => b?.status === 'To Produce').map(batch => (
+                    <div key={batch.order_id} style={styles.prodCard}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                        <h4 style={{ margin: 0 }}>
+                          Order #{batch.order_id} - {batch.customer_name}
+                        </h4>
+                        <span style={styles.prodTag('#eab308', 'white')}>To Produce</span>
+                      </div>
+                      <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '15px', lineHeight: '1.4' }}>
+                        {batch.merged_items}
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#6b7280', marginBottom: '5px' }}><span>Due Date:</span><span>{batch.due_date ? new Date(batch.due_date).toLocaleDateString() : 'N/A'}</span></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#6b7280' }}><span>Assigned To:</span><span>{batch.assigned_team}</span></div>
                     </div>
-                    <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '15px' }}>
-                      Quantity: {batch.quantity} units {batch.order_id && `(Order #${batch.order_id})`}
+                  ))}
+                </div>
+
+                {/* Column 2: In Process */}
+                <div style={styles.prodCol('#fff7ed')}>
+                  <div style={styles.prodColHeader('#c2410c')}><div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><MdArrowForward /> In Process</div><span style={{ backgroundColor: '#c2410c', color: 'white', padding: '2px 8px', borderRadius: '12px', fontSize: '12px' }}>{batches.filter(b => b?.status === 'In Process').length}</span></div>
+                  {batches.filter(b => b?.status === 'In Process').map(batch => (
+                    <div key={batch.order_id} style={styles.prodCard}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                        <h4 style={{ margin: 0 }}>
+                          Order #{batch.order_id} - {batch.customer_name}
+                        </h4>
+                        <span style={styles.prodTag('#f97316', 'white')}>In Process</span>
+                      </div>
+                      <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '15px', lineHeight: '1.4' }}>
+                        {batch.merged_items}
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#6b7280', marginBottom: '5px' }}><span>Start Date:</span><span>{batch.start_date ? new Date(batch.start_date).toLocaleDateString() : 'Today'}</span></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#6b7280', marginBottom: '5px' }}><span>Due Date:</span><span>{batch.due_date ? new Date(batch.due_date).toLocaleDateString() : 'N/A'}</span></div>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#6b7280', marginBottom: '5px' }}><span>Due Date:</span><span>{new Date(batch.due_date).toLocaleDateString()}</span></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#6b7280' }}><span>Assigned To:</span><span>{batch.assigned_team}</span></div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
 
-              {/* Column 2: In Process */}
-              <div style={styles.prodCol('#fff7ed')}>
-                <div style={styles.prodColHeader('#c2410c')}><div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><MdArrowForward /> In Process</div><span style={{ backgroundColor: '#c2410c', color: 'white', padding: '2px 8px', borderRadius: '12px', fontSize: '12px' }}>{batches.filter(b => b.status === 'In Process').length}</span></div>
-                {batches.filter(b => b.status === 'In Process').map(batch => (
-                  <div key={batch.batch_id} style={styles.prodCard}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}><h4 style={{ margin: 0 }}>{batch.product_name}</h4><span style={styles.prodTag('#f97316', 'white')}>In Process</span></div>
-                    <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '15px' }}>Quantity: {batch.quantity} units</div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#6b7280', marginBottom: '5px' }}><span>Start Date:</span><span>{new Date(batch.start_date).toLocaleDateString()}</span></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#6b7280', marginBottom: '5px' }}><span>Due Date:</span><span>{new Date(batch.due_date).toLocaleDateString()}</span></div>
-                  </div>
-                ))}
+                {/* Column 3: Completed */}
+                <div style={styles.prodCol('#f0fdf4')}>
+                  <div style={styles.prodColHeader('#15803d')}><div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><MdCheckCircle /> Completed</div><span style={{ backgroundColor: '#15803d', color: 'white', padding: '2px 8px', borderRadius: '12px', fontSize: '12px' }}>{batches.filter(b => b?.status === 'Completed' || b?.status === 'Ready for Delivery').length}</span></div>
+                  {batches.filter(b => b?.status === 'Completed' || b?.status === 'Ready for Delivery').map(batch => (
+                    <div key={batch.order_id} style={styles.prodCard}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                        <h4 style={{ margin: 0 }}>
+                          Order #{batch.order_id} - {batch.customer_name}
+                        </h4>
+                        <span style={styles.prodTag('#10b981', 'white')}>Completed</span>
+                      </div>
+                      <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '15px', lineHeight: '1.4' }}>
+                        {batch.merged_items}
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#6b7280', marginBottom: '5px' }}><span>Completed:</span><span>{batch.completed_date ? new Date(batch.completed_date).toLocaleDateString() : 'Recently'}</span></div>
+                    </div>
+                  ))}
+                </div>
               </div>
-
-              {/* Column 3: Completed */}
-              <div style={styles.prodCol('#f0fdf4')}>
-                <div style={styles.prodColHeader('#15803d')}><div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><MdCheckCircle /> Completed</div><span style={{ backgroundColor: '#15803d', color: 'white', padding: '2px 8px', borderRadius: '12px', fontSize: '12px' }}>{batches.filter(b => b.status === 'Completed').length}</span></div>
-                {batches.filter(b => b.status === 'Completed').map(batch => (
-                  <div key={batch.batch_id} style={styles.prodCard}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}><h4 style={{ margin: 0 }}>{batch.product_name}</h4><span style={styles.prodTag('#10b981', 'white')}>Completed</span></div>
-                    <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '15px' }}>Quantity: {batch.quantity} units</div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#6b7280', marginBottom: '5px' }}><span>Completed:</span><span>{new Date(batch.completed_date).toLocaleDateString()}</span></div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            )}
           </>
         )}
       </div>
@@ -1610,7 +1783,11 @@ export default function OwnerDashboard() {
               </div>
               <div style={styles.inputGroup}>
                 <label style={styles.label}>Category</label>
-                <input type="text" required style={styles.input} value={newInvItem.category} onChange={(e) => setNewInvItem({ ...newInvItem, category: e.target.value })} placeholder="e.g. Powder" />
+                <select style={styles.input} required value={newInvItem.category} onChange={(e) => setNewInvItem({ ...newInvItem, category: e.target.value })}>
+                  <option value="">Select Category</option>
+                  <option value="Spices">Spices</option>
+                  <option value="Sweet">Sweet</option>
+                </select>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
@@ -1629,10 +1806,6 @@ export default function OwnerDashboard() {
                 </div>
               </div>
 
-              <div style={{ ...styles.inputGroup, marginTop: '5px' }}>
-                <label style={styles.label}>Price (LKR)</label>
-                <input type="number" required min="0" step="0.01" style={styles.input} value={newInvItem.price} onChange={(e) => setNewInvItem({ ...newInvItem, price: parseFloat(e.target.value) })} />
-              </div>
 
               <button type="submit" style={styles.submitBtn}><MdAdd size={18} /> Add Item</button>
             </form>
@@ -1658,7 +1831,10 @@ export default function OwnerDashboard() {
               </div>
               <div style={styles.inputGroup}>
                 <label style={styles.label}>Category</label>
-                <input type="text" required style={styles.input} value={editingInvItem.category} onChange={(e) => setEditingInvItem({ ...editingInvItem, category: e.target.value })} />
+                <select style={styles.input} required value={editingInvItem.category} onChange={(e) => setEditingInvItem({ ...editingInvItem, category: e.target.value })}>
+                  <option value="Spices">Spices</option>
+                  <option value="Sweet">Sweet</option>
+                </select>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
@@ -1677,10 +1853,6 @@ export default function OwnerDashboard() {
                 </div>
               </div>
 
-              <div style={{ ...styles.inputGroup, marginTop: '5px' }}>
-                <label style={styles.label}>Price (LKR)</label>
-                <input type="number" required min="0" step="0.01" style={styles.input} value={editingInvItem.price} onChange={(e) => setEditingInvItem({ ...editingInvItem, price: parseFloat(e.target.value) })} />
-              </div>
 
               <button type="submit" style={styles.submitBtn}><MdCheckCircle size={18} /> Update Item</button>
             </form>
@@ -1703,7 +1875,11 @@ export default function OwnerDashboard() {
               </div>
               <div style={styles.inputGroup}>
                 <label style={styles.label}>Category</label>
-                <input type="text" required style={styles.input} value={newCatalogItem.category} onChange={(e) => setNewCatalogItem({ ...newCatalogItem, category: e.target.value })} placeholder="e.g. Whole Spices" />
+                <select style={styles.input} required value={newCatalogItem.category} onChange={(e) => setNewCatalogItem({ ...newCatalogItem, category: e.target.value })}>
+                  <option value="">Select Category</option>
+                  <option value="Spices">Spices</option>
+                  <option value="Sweet">Sweet</option>
+                </select>
               </div>
 
               <div style={styles.inputGroup}>
@@ -1711,47 +1887,37 @@ export default function OwnerDashboard() {
                 <textarea required style={{ ...styles.input, height: '80px', resize: 'none' }} value={newCatalogItem.description} onChange={(e) => setNewCatalogItem({ ...newCatalogItem, description: e.target.value })} placeholder="Describe the product for customers..." />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '15px' }}>
                 <div style={styles.inputGroup}>
                   <label style={styles.label}>Total Bulk Stock (kg)</label>
                   <input type="number" step="0.01" required style={styles.input} value={newCatalogItem.stock_level} onChange={(e) => setNewCatalogItem({ ...newCatalogItem, stock_level: parseFloat(e.target.value) })} />
                 </div>
-                <div style={styles.inputGroup}>
-                  <label style={styles.label}>Price (LKR)</label>
-                  <input type="number" required min="0" step="0.01" style={styles.input} value={newCatalogItem.price} onChange={(e) => setNewCatalogItem({ ...newCatalogItem, price: parseFloat(e.target.value) })} />
-                </div>
               </div>
 
               <div style={{ ...styles.tableCard, backgroundColor: '#f9fafb', padding: '15px', marginTop: '15px' }}>
-                <h4 style={{ margin: '0 0 10px 0', fontSize: '14px', color: '#374151' }}>Initial Packet Quantities</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
-                  {['50g', '100g', '200g'].map(w => (
-                    <div key={w} style={styles.inputGroup}>
-                      <label style={{ ...styles.label, fontSize: '11px' }}>{w} Packets</label>
-                      <input type="number" style={styles.input} value={newCatalogItem.packets[w]} onChange={(e) => setNewCatalogItem({ ...newCatalogItem, packets: { ...newCatalogItem.packets, [w]: parseInt(e.target.value) || 0 } })} />
-                    </div>
-                  ))}
+                <h4 style={{ margin: '0 0 10px 0', fontSize: '14px', color: '#374151' }}>Packet Quantities & Pricing</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '15px' }}>
+                  {['50g', '100g', '200g'].map(w => {
+                    const qty = newCatalogItem.packets?.[w]?.quantity;
+                    const price = newCatalogItem.packets?.[w]?.price;
+                    return (
+                      <div key={w} style={{ display: 'grid', gridTemplateColumns: '60px 1fr 1fr', gap: '10px', alignItems: 'center', backgroundColor: '#fff', padding: '10px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                        <div style={{ fontWeight: '600' }}>{w}</div>
+                        <div style={{ ...styles.inputGroup, marginBottom: 0 }}>
+                          <label style={{ ...styles.label, fontSize: '11px' }}>Initial Quantity</label>
+                          <input type="number" style={styles.input} value={qty !== undefined ? qty : ''} onChange={(e) => setNewCatalogItem({ ...newCatalogItem, packets: { ...newCatalogItem.packets, [w]: { ...newCatalogItem.packets?.[w], quantity: e.target.value === '' ? '' : parseInt(e.target.value) } } })} />
+                        </div>
+                        <div style={{ ...styles.inputGroup, marginBottom: 0 }}>
+                          <label style={{ ...styles.label, fontSize: '11px' }}>Price (LKR)</label>
+                          <input type="number" min="0" step="0.01" style={styles.input} value={price !== undefined ? price : ''} onChange={(e) => setNewCatalogItem({ ...newCatalogItem, packets: { ...newCatalogItem.packets, [w]: { ...newCatalogItem.packets?.[w], price: e.target.value === '' ? '' : parseFloat(e.target.value) } } })} />
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
-              <div style={{ ...styles.tableCard, backgroundColor: '#f9fafb', padding: '15px', marginTop: '15px', marginBottom: '20px' }}>
-                <h4 style={{ margin: '0 0 10px 0', fontSize: '14px', color: '#374151' }}>Raw Material Consumption</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                  <div style={styles.inputGroup}>
-                    <label style={styles.label}>Raw Material (Optional)</label>
-                    <select style={styles.input} value={newCatalogItem.raw_material_id} onChange={(e) => setNewCatalogItem({ ...newCatalogItem, raw_material_id: e.target.value })}>
-                      <option value="">Select Raw Material</option>
-                      {inventoryList.map(inv => (
-                        <option key={inv.inventory_id} value={inv.inventory_id}>{inv.name} (Stock: {inv.stock} {inv.unit})</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div style={styles.inputGroup}>
-                    <label style={styles.label}>Total Quantity Used (kg/L)</label>
-                    <input type="number" step="0.01" min="0" style={styles.input} disabled={!newCatalogItem.raw_material_id} value={newCatalogItem.raw_material_quantity} onChange={(e) => setNewCatalogItem({ ...newCatalogItem, raw_material_quantity: parseFloat(e.target.value) })} placeholder="e.g. 10.5" />
-                  </div>
-                </div>
-              </div>
+
 
               <button type="submit" style={{ ...styles.submitBtn, backgroundColor: '#10b981' }}><MdAdd size={18} /> Publish Product</button>
             </form>
@@ -1806,7 +1972,10 @@ export default function OwnerDashboard() {
               </div>
               <div style={styles.inputGroup}>
                 <label style={styles.label}>Category</label>
-                <input type="text" required style={styles.input} value={editingCatalogItem.category} onChange={(e) => setEditingCatalogItem({ ...editingCatalogItem, category: e.target.value })} />
+                <select style={styles.input} required value={editingCatalogItem.category} onChange={(e) => setEditingCatalogItem({ ...editingCatalogItem, category: e.target.value })}>
+                  <option value="Spices">Spices</option>
+                  <option value="Sweet">Sweet</option>
+                </select>
               </div>
 
               <div style={styles.inputGroup}>
@@ -1814,65 +1983,61 @@ export default function OwnerDashboard() {
                 <textarea required style={{ ...styles.input, height: '80px', resize: 'none' }} value={editingCatalogItem.description} onChange={(e) => setEditingCatalogItem({ ...editingCatalogItem, description: e.target.value })} />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                <div style={styles.inputGroup}>
-                  <label style={styles.label}>Total Bulk Stock (kg)</label>
-                  <input type="number" step="0.01" required style={styles.input} value={editingCatalogItem.stock_level} onChange={(e) => setEditingCatalogItem({ ...editingCatalogItem, stock_level: parseFloat(e.target.value) })} />
-                </div>
-                <div style={styles.inputGroup}>
-                  <label style={styles.label}>Price (LKR)</label>
-                  <input type="number" required min="0" step="0.01" style={styles.input} value={editingCatalogItem.price} onChange={(e) => setEditingCatalogItem({ ...editingCatalogItem, price: parseFloat(e.target.value) })} />
-                </div>
-              </div>
-
               <div style={{ ...styles.tableCard, backgroundColor: '#f3f4f6', padding: '15px', marginTop: '15px' }}>
-                <h4 style={{ margin: '0 0 10px 0', fontSize: '14px', color: '#374151' }}>Packet Inventory (Absolute Counts)</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+                <h4 style={{ margin: '0 0 10px 0', fontSize: '14px', color: '#374151' }}>Packet Inventory & Pricing</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '15px' }}>
                   {['50g', '100g', '200g'].map(w => {
                     const pkg = editingCatalogItem.packets?.find(p => p.weight === w);
                     return (
-                      <div key={w} style={styles.inputGroup}>
-                        <label style={{ ...styles.label, fontSize: '11px' }}>{w} Packets</label>
-                        <input
-                          type="number"
-                          style={styles.input}
-                          value={pkg ? pkg.quantity : 0}
-                          onChange={(e) => {
-                            const newPackets = [...(editingCatalogItem.packets || [])];
-                            const idx = newPackets.findIndex(p => p.weight === w);
-                            if (idx > -1) {
-                              newPackets[idx] = { ...newPackets[idx], quantity: parseInt(e.target.value) || 0 };
-                            } else {
-                              newPackets.push({ weight: w, quantity: parseInt(e.target.value) || 0 });
-                            }
-                            setEditingCatalogItem({ ...editingCatalogItem, packets: newPackets });
-                          }}
-                        />
+                      <div key={w} style={{ display: 'grid', gridTemplateColumns: '60px 1fr 1fr', gap: '10px', alignItems: 'center', backgroundColor: '#fff', padding: '10px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                        <div style={{ fontWeight: '600' }}>{w}</div>
+                        <div style={{ ...styles.inputGroup, marginBottom: 0 }}>
+                          <label style={{ ...styles.label, fontSize: '11px' }}>Quantity</label>
+                          <input
+                            type="number"
+                            style={styles.input}
+                            value={pkg && pkg.quantity !== undefined ? pkg.quantity : ''}
+                            onChange={(e) => {
+                              const newPackets = [...(editingCatalogItem.packets || [])];
+                              const idx = newPackets.findIndex(p => p.weight === w);
+                              const val = e.target.value === '' ? '' : parseInt(e.target.value);
+                              if (idx > -1) {
+                                newPackets[idx] = { ...newPackets[idx], quantity: val };
+                              } else {
+                                newPackets.push({ weight: w, quantity: val, price: '' });
+                              }
+                              setEditingCatalogItem({ ...editingCatalogItem, packets: newPackets });
+                            }}
+                          />
+                        </div>
+                        <div style={{ ...styles.inputGroup, marginBottom: 0 }}>
+                          <label style={{ ...styles.label, fontSize: '11px' }}>Price (LKR)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            style={styles.input}
+                            value={pkg && pkg.price !== undefined ? pkg.price : ''}
+                            onChange={(e) => {
+                              const newPackets = [...(editingCatalogItem.packets || [])];
+                              const idx = newPackets.findIndex(p => p.weight === w);
+                              const val = e.target.value === '' ? '' : parseFloat(e.target.value);
+                              if (idx > -1) {
+                                newPackets[idx] = { ...newPackets[idx], price: val };
+                              } else {
+                                newPackets.push({ weight: w, quantity: 0, price: val });
+                              }
+                              setEditingCatalogItem({ ...editingCatalogItem, packets: newPackets });
+                            }}
+                          />
+                        </div>
                       </div>
                     );
                   })}
                 </div>
               </div>
 
-              <div style={{ ...styles.tableCard, backgroundColor: '#f9fafb', padding: '15px', marginTop: '15px', marginBottom: '20px' }}>
-                <h4 style={{ margin: '0 0 10px 0', fontSize: '14px', color: '#374151' }}>Deduct Extra Raw Material on Stock Increase</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                  <div style={styles.inputGroup}>
-                    <label style={styles.label}>Raw Material (Optional)</label>
-                    <select style={styles.input} value={editingCatalogItem.raw_material_id || ''} onChange={(e) => setEditingCatalogItem({ ...editingCatalogItem, raw_material_id: e.target.value })}>
-                      <option value="">Select Raw Material</option>
-                      {inventoryList.map(inv => (
-                        <option key={inv.inventory_id} value={inv.inventory_id}>{inv.name} (Stock: {inv.stock} {inv.unit})</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div style={styles.inputGroup}>
-                    <label style={styles.label}>Qty Used PER NEW PACKET (kg/L)</label>
-                    <input type="number" step="0.01" min="0" style={styles.input} disabled={!editingCatalogItem.raw_material_id} value={editingCatalogItem.raw_material_quantity_per_unit || ''} onChange={(e) => setEditingCatalogItem({ ...editingCatalogItem, raw_material_quantity_per_unit: parseFloat(e.target.value) })} placeholder="e.g. 0.25" />
-                  </div>
-                </div>
-                <p style={{ fontSize: '12px', color: '#6b7280', margin: '5px 0 0 0' }}>If you increase the stock level, this material will be deducted automatically based on the newly added packets.</p>
-              </div>
+
 
               <button type="submit" style={{ ...styles.submitBtn, backgroundColor: '#10b981' }}><MdCheckCircle size={18} /> Save Changes</button>
             </form>
@@ -1977,7 +2142,7 @@ export default function OwnerDashboard() {
                 <div style={styles.inputGroup}>
                   <label style={styles.label}>Select Payment Method</label>
                   <div style={{ display: 'flex', gap: '15px', marginTop: '10px' }}>
-                    <div 
+                    <div
                       onClick={() => setPurchasePaymentMethod('cod')}
                       style={{
                         flex: 1, padding: '12px', borderRadius: '8px', border: purchasePaymentMethod === 'cod' ? '2px solid #3b82f6' : '1px solid #e5e7eb',
@@ -1986,7 +2151,7 @@ export default function OwnerDashboard() {
                     >
                       <div style={{ fontWeight: '600', fontSize: '14px', color: purchasePaymentMethod === 'cod' ? '#1e40af' : '#374151' }}>Cash on Delivery</div>
                     </div>
-                    <div 
+                    <div
                       onClick={() => setPurchasePaymentMethod('online')}
                       style={{
                         flex: 1, padding: '12px', borderRadius: '8px', border: purchasePaymentMethod === 'online' ? '2px solid #3b82f6' : '1px solid #e5e7eb',
@@ -2034,23 +2199,23 @@ export default function OwnerDashboard() {
       {/* --- SUPPLIER E-RECEIPT MODAL --- */}
       {showReceiptModal && receiptData && (
         <div style={styles.modalOverlay} onClick={() => setShowReceiptModal(false)}>
-          <div style={{...styles.modalContent, width: '700px', backgroundColor: '#ffffff', color: '#1f2937'}} onClick={e => e.stopPropagation()}>
+          <div style={{ ...styles.modalContent, width: '700px', backgroundColor: '#ffffff', color: '#1f2937' }} onClick={e => e.stopPropagation()}>
             {/* Printable Area */}
             <div id="printable-receipt" style={{ padding: '20px', fontFamily: '"Inter", sans-serif' }}>
-              
+
               <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid #e5e7eb', paddingBottom: '20px', marginBottom: '20px' }}>
                 <div>
                   <h2 style={{ margin: 0, fontSize: '24px', fontWeight: '800', color: '#111827' }}>
                     {receiptData.company_name}
                   </h2>
                   <p style={{ margin: '5px 0 0 0', color: '#4b5563', fontSize: '14px' }}>
-                    {receiptData.contact_info} <br/> {receiptData.supplier_contact}
+                    {receiptData.contact_info} <br /> {receiptData.supplier_contact}
                   </p>
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <h1 style={{ margin: 0, fontSize: '28px', fontWeight: '700', color: '#374151', letterSpacing: '1px' }}>ORDER INVOICE</h1>
                   <p style={{ margin: '5px 0 0 0', color: '#6b7280', fontSize: '14px' }}>
-                    Invoice Date: {new Date(receiptData.order_date).toLocaleDateString()}<br/>
+                    Invoice Date: {new Date(receiptData.order_date).toLocaleDateString()}<br />
                     Invoice #: INV-{receiptData.po_id}-{(new Date(receiptData.order_date).getFullYear())}
                   </p>
                 </div>
@@ -2110,7 +2275,7 @@ export default function OwnerDashboard() {
                 document.body.innerHTML = content;
                 window.print();
                 document.body.innerHTML = original;
-                window.location.reload(); 
+                window.location.reload();
               }}>
                 Print Invoice
               </button>
@@ -2122,19 +2287,19 @@ export default function OwnerDashboard() {
       {/* --- RETURN REQUEST MODAL --- */}
       {showReturnModal && (
         <div style={styles.modalOverlay} onClick={() => setShowReturnModal(false)}>
-          <div style={{...styles.modalContent, width: '450px'}} onClick={e => e.stopPropagation()}>
+          <div style={{ ...styles.modalContent, width: '450px' }} onClick={e => e.stopPropagation()}>
             <div style={styles.modalHeader}>
               <h3 style={styles.modalTitle}>Request Return</h3>
               <button style={styles.closeBtn} onClick={() => setShowReturnModal(false)}><MdClose size={24} /></button>
             </div>
-            <form onSubmit={handleRequestReturn} style={{padding: '10px 0'}}>
-              <p style={{fontSize: '14px', color: '#6b7280', marginBottom: '15px'}}>Please explain why you are requesting a return for PO #{selectedPOForReturn?.po_id}:</p>
-              <textarea 
+            <form onSubmit={handleRequestReturn} style={{ padding: '10px 0' }}>
+              <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '15px' }}>Please explain why you are requesting a return for PO #{selectedPOForReturn?.po_id}:</p>
+              <textarea
                 style={{
-                  width: '100%', 
-                  height: '120px', 
-                  padding: '12px', 
-                  borderRadius: '8px', 
+                  width: '100%',
+                  height: '120px',
+                  padding: '12px',
+                  borderRadius: '8px',
                   border: '1px solid #e5e7eb',
                   resize: 'none',
                   fontSize: '14px',
@@ -2145,17 +2310,17 @@ export default function OwnerDashboard() {
                 value={returnReason}
                 onChange={e => setReturnReason(e.target.value)}
               />
-              <div style={{display: 'flex', gap: '10px', marginTop: '20px'}}>
-                <button 
+              <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+                <button
                   type="button"
-                  style={{...styles.updateBtn, flex: 1, backgroundColor: '#6b7280'}} 
+                  style={{ ...styles.updateBtn, flex: 1, backgroundColor: '#6b7280' }}
                   onClick={() => setShowReturnModal(false)}
                 >
                   Cancel
                 </button>
-                <button 
+                <button
                   type="submit"
-                  style={{...styles.updateBtn, flex: 1, backgroundColor: '#ef4444'}} 
+                  style={{ ...styles.updateBtn, flex: 1, backgroundColor: '#ef4444' }}
                   disabled={isSubmittingReturn}
                 >
                   {isSubmittingReturn ? 'Sending...' : 'Confirm Request'}
@@ -2168,4 +2333,4 @@ export default function OwnerDashboard() {
 
     </div>
   );
-}
+}

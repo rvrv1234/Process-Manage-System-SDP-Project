@@ -311,11 +311,7 @@ export default function StaffDashboard() {
             </div>
 
             {/* Stats Cards */}
-            <div style={styles.statsGrid}>
-              <div style={styles.statCard}>
-                <div style={{display:'flex',justifyContent:'space-between'}}><div style={styles.iconBox('#f59e0b')}><MdFactory /></div><span style={{color:'#10b981',fontWeight:'600'}}>↑</span></div>
-                <div><div style={{fontSize:'32px',fontWeight:'700'}}>{batches?.filter(b => b.status === 'To Produce' || b.status === 'In Process').length || 0}</div><div style={{fontSize:'14px',color:'#6b7280'}}>Active Batches</div></div>
-              </div>
+            <div style={{...styles.statsGrid, gridTemplateColumns: 'repeat(2, 1fr)'}}>
               <div style={styles.statCard}>
                 <div style={{display:'flex',justifyContent:'space-between'}}><div style={styles.iconBox('#f59e0b')}><MdAccessTime /></div><span style={{color:'white',fontWeight:'600'}}></span></div>
                 <div><div style={{fontSize:'32px',fontWeight:'700'}}>{batches?.filter(b => b.status === 'In Process').length || 0}</div><div style={{fontSize:'14px',color:'#6b7280'}}>In Production</div></div>
@@ -407,7 +403,7 @@ export default function StaffDashboard() {
               </div>
 
               <table style={styles.table}>
-                <thead><tr><th style={styles.th}>Product ID</th><th style={styles.th}>Name</th><th style={styles.th}>Packets (Available)</th><th style={styles.th}>Stock (Bulk)</th><th style={styles.th}>Price (Base)</th><th style={styles.th}>Status</th></tr></thead>
+                <thead><tr><th style={styles.th}>Product ID</th><th style={styles.th}>Name</th><th style={styles.th}>Packets (Available)</th><th style={styles.th}>Status</th></tr></thead>
                 <tbody>
                   {(() => {
                     const filteredProducts = apiProducts.filter(item => {
@@ -423,11 +419,11 @@ export default function StaffDashboard() {
                     });
 
                     if (apiProducts.length === 0) {
-                      return <tr><td colSpan="6" style={{...styles.td, textAlign:'center'}}>No products found in catalog.</td></tr>;
+                      return <tr><td colSpan="4" style={{...styles.td, textAlign:'center'}}>No products found in catalog.</td></tr>;
                     }
 
                     if (filteredProducts.length === 0) {
-                      return <tr><td colSpan="6" style={{...styles.td, textAlign:'center'}}>No products match your search "{searchTerm}".</td></tr>;
+                      return <tr><td colSpan="4" style={{...styles.td, textAlign:'center'}}>No products match your search "{searchTerm}".</td></tr>;
                     }
 
                     return filteredProducts.map(item => {
@@ -446,7 +442,7 @@ export default function StaffDashboard() {
                           <td style={styles.td}>
                             <div style={{fontSize:'12px', display:'flex', flexWrap:'wrap', gap:'5px'}}>
                               {item.packets && item.packets.length > 0 ? (
-                                item.packets.map(p => (
+                                [...item.packets].sort((a, b) => parseInt(a.weight) - parseInt(b.weight)).map(p => (
                                   <span key={p.weight} style={{backgroundColor:'#f3f4f6', padding:'2px 6px', borderRadius:'4px'}}>
                                     {p.weight}: <strong>{p.quantity}</strong>
                                   </span>
@@ -456,10 +452,6 @@ export default function StaffDashboard() {
                               )}
                             </div>
                           </td>
-                          <td style={styles.td}>
-                            {parseFloat(item.stock_level || 0).toLocaleString()} kg
-                          </td>
-                          <td style={styles.td}>LKR {Number(item.price).toLocaleString()}</td>
                           <td style={styles.td}>
                             <span style={{
                               backgroundColor: statusInfo.color, 
@@ -483,13 +475,11 @@ export default function StaffDashboard() {
           <>
             <div style={styles.pageHeader}>
               <div><h1 style={styles.pageTitle}>Production Management</h1><p style={styles.pageSubtitle}>Track and manage production batches</p></div>
-              <button style={styles.primaryBtn}><MdAdd /> New Batch</button>
             </div>
 
             {/* Production Stats */}
-            <div style={{...styles.statsGrid, gridTemplateColumns: 'repeat(4, 1fr)'}}>
+            <div style={{...styles.statsGrid, gridTemplateColumns: 'repeat(3, 1fr)'}}>
               {[
-                {l:'Total Batches', v:safeBatches.length, i:<MdFactory />, c:'#f59e0b'},
                 {l:'To Produce', v:safeBatches.filter(b => b?.status === 'To Produce').length, i:<MdAccessTime />, c:'#eab308'},
                 {l:'In Process', v:safeBatches.filter(b => b?.status === 'In Process').length, i:<MdArrowForward />, c:'#f97316'},
                 {l:'Completed', v:safeBatches.filter(b => b?.status === 'Completed' || b?.status === 'Ready for Delivery').length, i:<MdCheckCircle />, c:'#10b981'}

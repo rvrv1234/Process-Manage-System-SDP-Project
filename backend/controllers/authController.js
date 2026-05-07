@@ -6,7 +6,7 @@ const nodemailer = require('nodemailer');
 const { logAudit } = require('../utils/auditLogger');
 
 
-// --- 1. SETUP EMAIL TRANSPORTER (GMAIL) ---
+//  SETUP EMAIL
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
@@ -15,24 +15,24 @@ const transporter = nodemailer.createTransport({
     }
 });
 
-// --- 2. REGISTER USER ---
+// REGISTER USER 
 const registerUser = async (req, res) => {
-    // Get all potential fields from the frontend
+    // Get all fields from the frontend
     const { name, email, password, role, phone, address, company_name, description } = req.body;
 
     try {
-        // A. Check if user already exists
+        // Check if user already exists
         const userExists = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
         if (userExists.rows.length > 0) {
             return res.status(400).json({ message: 'User already exists' });
         }
 
-        // B. Hash the Password (Security)
+        //  Hash the Password
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
-        // C. Insert into USERS table
-        // We set is_verified to FALSE initially
+        // Insert into USERS table
+        
         const newUser = await pool.query(
             'INSERT INTO users (name, email, password, role, phone, address, is_verified) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, name, email, role, phone, address, is_verified',
             [name, email, hashedPassword, role, phone, address, false]
@@ -40,7 +40,7 @@ const registerUser = async (req, res) => {
         
         const userId = newUser.rows[0].id;
 
-        // D. Insert into ROLE-SPECIFIC Tables
+        // Insert into ROLE-SPECIFIC Tables
         if (role === 'customer') {
             await pool.query('INSERT INTO customers (user_id, address, name, email, phone) VALUES ($1, $2, $3, $4, $5)', [userId, address, name, email, phone]);
         } 
@@ -51,7 +51,7 @@ const registerUser = async (req, res) => {
                 [userId, name, address, company_name, phone, description, 'Pending']
             );
             
-            // 🛑 STOP HERE FOR SUPPLIERS
+            // FOR SUPPLIERS
             // Do NOT send the verification email yet. The Admin must approve first.
             return res.status(201).json({ 
                 message: 'Request sent to Owner! You will receive an email once approved.' 
@@ -70,18 +70,18 @@ const registerUser = async (req, res) => {
         const reqUserId = req.user?.id || null;
         await logAudit(userId, 'USER_REGISTER', 'users', userId);
 
-        // E. Generate Verification Token & Send Email
-        // This will send verification emails to any registering role (Customers, Staff) except Suppliers.
+        // Generate Verification Token & Send Email
+        
         const emailToken = jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: '1d' });
         
-        // This link points to your BACKEND, which will then redirect to Frontend
+        // This link points to BACKEND, which will then redirect to Frontend
         const url = `http://localhost:5000/api/auth/verify/${emailToken}`;
 
         await transporter.sendMail({
             to: email,
-            subject: 'Verify Your Email - Spices App',
+            subject: 'Verify Your Email - Hasal Products',
             html: `
-                <h3>Welcome to Spices App!</h3>
+                <h3>Welcome to Hasal Products!</h3>
                 <p>Please click the link below to verify your email address:</p>
                 <a href="${url}">Verify Email</a>
             `
@@ -95,36 +95,36 @@ const registerUser = async (req, res) => {
     }
 };
 
-// --- 3. LOGIN USER (UPDATED) ---
+//  LOGIN USER
 const loginUser = async (req, res) => {
     const { email, password } = req.body;
 
     try {
-        // A. Find User
+        //  Find User
         const result = await pool.query('SELECT id, name, email, password, role, phone, address, is_verified FROM users WHERE email = $1', [email]);
         if (result.rows.length === 0) return res.status(400).json({ message: 'Invalid Credentials' });
 
         const user = result.rows[0];
 
-        // B. Check Password using Bcrypt
+        // Check Password using Bcrypt
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) return res.status(400).json({ message: 'Invalid Credentials' });
 
-        // C. Check Verification Status (UPDATED LOGIC)
-        // Customers verify via email sent at registration.
-        // Suppliers verify via email sent when the Owner approves their request.
-        // Staff, Delivery, and Owners SKIP this check entirely.
+        // Check Verification Status
+        
+        
+        
         const rolesRequiringVerification = ['customer', 'supplier'];
 
         if (rolesRequiringVerification.includes(user.role) && !user.is_verified) {
-            // Supplier-specific message vs Customer message
+            // Supplier specific message vs Customer message
             const msg = user.role === 'supplier' 
                 ? 'Your request is still pending approval from the Owner, or you have not verified your email yet.' 
                 : 'Please verify your email first (Check your inbox)';
             return res.status(403).json({ message: msg });
         }
 
-        // D. Login Success -> Send Token
+        //  Login Success -Send Token
         await logAudit(user.id, 'USER_LOGIN', 'users', user.id);
         const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '30d' });
 
@@ -140,12 +140,12 @@ const loginUser = async (req, res) => {
     }
 };
 
-// --- 4. VERIFY EMAIL ROUTE ---
+//  VERIFY EMAIL ROUTE 
 const verifyEmail = async (req, res) => {
     try {
         const { token } = req.params;
 
-        // Debugging: Check if Secret is loaded
+        //  Check if Secret is loaded
         if (!process.env.JWT_SECRET) {
             console.error("ERROR: JWT_SECRET is missing in .env or not loaded!");
             return res.status(500).send("Server Configuration Error: Missing Secret");
@@ -171,13 +171,13 @@ const verifyEmail = async (req, res) => {
     }
 };
 
-// --- 5. FORGOT PASSWORD (DEBUG VERSION) ---
+// FORGOT PASSWORD
 const forgotPassword = async (req, res) => {
     const { email } = req.body;
     console.log("1. Received Forgot Password Request for:", email);
 
     try {
-        // A. Check if user exists
+        // Check if user exists
         const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
         if (result.rows.length === 0) {
             console.log("❌ User not found in database.");
@@ -187,10 +187,10 @@ const forgotPassword = async (req, res) => {
         const user = result.rows[0];
         console.log("2. User Found:", user.email);
 
-        // B. Generate Reset Token
+        // Generate Reset Token
         const resetToken = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: '15m' });
         
-        // C. Check Email Credentials
+        // Check Email Credentials
         if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
             console.log("❌ ERROR: Missing EMAIL_USER or EMAIL_PASS in .env file");
             return res.status(500).json({ message: 'Server Config Error: Email credentials missing' });
@@ -198,7 +198,7 @@ const forgotPassword = async (req, res) => {
 
         console.log("3. Preparing to send email via:", process.env.EMAIL_USER);
 
-        // D. Send Email
+        // Send Email
         const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password/${resetToken}`;
 
         await transporter.sendMail({
@@ -220,20 +220,20 @@ const forgotPassword = async (req, res) => {
     }
 };
 
-// --- 6. RESET PASSWORD (UPDATE DB) ---
+// RESET PASSWORD 
 const resetPassword = async (req, res) => {
     const { token } = req.params;
     const { newPassword } = req.body;
 
     try {
-        // A. Verify Token
+        // Verify Token
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-        // B. Hash New Password
+        // Hash New Password
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(newPassword, salt);
 
-        // C. Update Password in DB
+        // Update Password in DB
         await pool.query('UPDATE users SET password = $1 WHERE id = $2', [hashedPassword, decoded.id]);
 
         await logAudit(decoded.id, 'PASSWORD_RESET', 'users', decoded.id);

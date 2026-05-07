@@ -1,9 +1,13 @@
+// stripe payment
+
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 const createPaymentIntent = async (req, res) => {
     console.log('💳 Stripe Controller Hit!');
     try {
         const { amount } = req.body;
+
+        // validation
 
         if (!amount || isNaN(amount)) {
             return res.status(400).json({ message: "Invalid amount provided" });

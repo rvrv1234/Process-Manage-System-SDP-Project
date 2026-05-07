@@ -12,7 +12,7 @@ const PaymentWrapper = ({ amount, onClose, onPaymentSuccess }) => {
     const [error, setError] = useState("");
 
     useEffect(() => {
-        // Fetch the secure PaymentIntent secret from your Node.js backend
+        
         const fetchIntent = async () => {
             try {
                 const res = await axios.post('http://localhost:5000/api/payments/create-payment-intent', { amount });

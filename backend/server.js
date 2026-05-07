@@ -11,7 +11,7 @@ const paymentRoutes = require('./routes/paymentRoutes');
 const ownerPaymentRoutes = require('./routes/ownerPaymentRoutes');
 const returnRoutes = require('./routes/returnRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
-
+const passwordRoutes = require('./routes/passwordRoutes');
 
 // --- 1. IMPORT CONTROLLERS ---
 // We import Auth functions directly to ensure verifyEmail is accessible
@@ -55,7 +55,7 @@ app.use('/api/delivery', deliveryRoutes);
 app.use('/api/returns', returnRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/notifications', notificationRoutes);
-
+app.use('/api/password', passwordRoutes);
 // --- ADMIN ROUTES (Supplier Requests) ---
 app.get('/api/admin/requests', getPendingSuppliers); // Fetch list
 app.put('/api/admin/approve/:id', approveSupplier);  // Approve

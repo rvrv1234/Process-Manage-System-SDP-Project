@@ -3,7 +3,7 @@ const nodemailer = require('nodemailer');
 const jwt = require('jsonwebtoken');
 const { logAudit } = require('../utils/auditLogger');
 
-// --- SETUP EMAIL (Same as Auth Controller) ---
+// emailing
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
@@ -12,7 +12,7 @@ const transporter = nodemailer.createTransport({
     }
 });
 
-// --- 1. GET PENDING SUPPLIERS ---
+// GET PENDING SUPPLIERS 
 const getPendingSuppliers = async (req, res) => {
     try {
         const query = `
@@ -29,14 +29,14 @@ const getPendingSuppliers = async (req, res) => {
     }
 };
 
-// --- 2. APPROVE SUPPLIER (AND SEND EMAIL) ---
+//  APPROVE SUPPLIER 
 const approveSupplier = async (req, res) => {
-    const { id } = req.params; // This is supplier_id
+    const { id } = req.params;
 
     try {
-        // A. Update Status in DB
+        // Update Status in DB
         const updateResult = await pool.query(
-            "UPDATE suppliers SET status = 'Approved' WHERE supplier_id = $1 RETURNING user_id", 
+            "UPDATE suppliers SET status = 'Approved' WHERE supplier_id = $1 RETURNING user_id",
             [id]
         );
 
@@ -44,18 +44,18 @@ const approveSupplier = async (req, res) => {
             return res.status(404).json({ message: 'Supplier not found' });
         }
 
-        // B. Get User Details (Email)
+        // Get User Details 
         const userId = updateResult.rows[0].user_id;
         const userResult = await pool.query("SELECT email FROM users WHERE id = $1", [userId]);
         const userEmail = userResult.rows[0].email;
 
-        // C. Generate Verification Token
+        // Generate Verification Token
         const emailToken = jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: '7d' });
-        
+
         // This link allows them to verify and then login
         const url = `http://localhost:5000/api/auth/verify/${emailToken}`;
 
-        // D. Send "You are Approved" Email
+        //  Send "You are Approved" Email
         await transporter.sendMail({
             to: userEmail,
             subject: 'Congratulations! Supplier Request Approved',
@@ -78,16 +78,16 @@ const approveSupplier = async (req, res) => {
     }
 };
 
-// --- 3. REJECT SUPPLIER ---
+// REJECT SUPPLIER 
 const rejectSupplier = async (req, res) => {
     const { id } = req.params;
     try {
-        // Just set status to Rejected (No email sent)
+        // set status to Rejected 
         await pool.query("UPDATE suppliers SET status = 'Rejected' WHERE supplier_id = $1", [id]);
-        
+
         const auditUserId = req.user?.id || req.body?.user_id || null;
         await logAudit(auditUserId, 'REJECT_SUPPLIER', 'suppliers', id);
-        
+
         res.json({ message: 'Supplier Rejected' });
     } catch (error) {
         console.error(error);

@@ -2,9 +2,9 @@ const pool = require('../config/db');
 const { logAudit } = require('../utils/auditLogger');
 const { createNotification } = require('../utils/notificationHelper');
 
-// 1. Get Available Orders for Pickup
-// Queries orders with status 'READY FOR DELIVERY' that have no delivery record yet.
-// This bypasses the need for a pre-inserted deliveries row, since delivery_staff_id is NOT NULL.
+// Get Available Orders for Pickup
+
+
 const getAvailableOrders = async (req, res) => {
     try {
         const query = `
@@ -40,11 +40,11 @@ const getAvailableOrders = async (req, res) => {
     }
 };
 
-// 2. Claim (Accept) an Order
-// Auto-creates a deliverystaff record if needed, then inserts into deliveries with correct FK.
+// claim order
+
 const claimOrder = async (req, res) => {
     const { orderId } = req.params;
-    const userId = req.user.id; // This is users.id from the JWT
+    const userId = req.user.id; 
 
     const client = await pool.connect();
     try {
@@ -60,7 +60,7 @@ const claimOrder = async (req, res) => {
             return res.status(400).json({ message: "Order already claimed or not ready for delivery." });
         }
 
-        // Check no delivery record exists yet (race condition protection)
+        // Check no delivery record exists yet 
         const deliveryCheck = await client.query(
             "SELECT delivery_id FROM deliveries WHERE order_id = $1",
             [orderId]
@@ -91,7 +91,7 @@ const claimOrder = async (req, res) => {
         const deliveryRecord = insertRes.rows[0];
         await logAudit(userId, 'DRIVER_CLAIMED_DELIVERY', 'deliveries', deliveryRecord.delivery_id);
 
-        // --- NOTIFICATION: Inform customer their order has been picked up ---
+        //  Inform customer their order has been picked up 
         try {
             const customerUserResult = await pool.query(
                 'SELECT c.user_id FROM customers c JOIN orders o ON o.customer_id = c.customer_id WHERE o.order_id = $1',
@@ -121,7 +121,7 @@ const claimOrder = async (req, res) => {
     }
 };
 
-// 3. Get My Assigned Deliveries
+// Get Assigned Deliveries
 const getMyDeliveries = async (req, res) => {
     const userId = req.user.id; // users.id from JWT
     try {
@@ -161,7 +161,7 @@ const getMyDeliveries = async (req, res) => {
     }
 };
 
-// 4. Complete a Delivery
+//  Complete a Delivery
 const completeDelivery = async (req, res) => {
     const { deliveryId } = req.params;
     const userId = req.user.id;
@@ -200,7 +200,7 @@ const completeDelivery = async (req, res) => {
 
         await logAudit(userId, 'DRIVER_COMPLETED_DELIVERY', 'deliveries', deliveryId);
 
-        // --- NOTIFICATION: Inform customer their order has been delivered ---
+        // Inform customer their order has been delivered 
         try {
             const customerUserResult = await pool.query(
                 'SELECT c.user_id FROM customers c JOIN orders o ON o.customer_id = c.customer_id WHERE o.order_id = $1',

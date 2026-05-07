@@ -46,7 +46,11 @@ export default function SupplierDashboard() {
     
     if (!window.confirm(`Are you sure you want to mark this order as ${newStatus}?`)) return;
     try {
-      await axios.put(`http://localhost:5000/api/suppliers/purchase-orders/${poId}/status`, { status: newStatus });
+      if (newStatus === 'Delivered') {
+        await axios.patch(`http://localhost:5000/api/suppliers/purchase-orders/${poId}/receive`);
+      } else {
+        await axios.put(`http://localhost:5000/api/suppliers/purchase-orders/${poId}/status`, { status: newStatus });
+      }
       alert(`Order marked as ${newStatus}!`);
       fetchOrders();
     } catch (err) {
@@ -425,7 +429,7 @@ export default function SupplierDashboard() {
             <div style={styles.sectionHeader}>
               <div><h3 style={{fontSize:'18px', fontWeight:'600'}}>Order Management</h3><p style={{fontSize:'13px', color:'#6b7280'}}>Orders from Hasal Products</p></div>
               <div style={styles.filterBtnGroup}>
-                {['Total', 'Pending', 'Shipped', 'Delivered', 'Rejected'].map(label => (
+                {['Total', 'Pending', 'Confirmed', 'Shipped', 'Delivered', 'Rejected'].map(label => (
                   <button key={label} style={styles.filterBtn(label)} onClick={() => setFilter(label)}>{label} ({label === 'Total' ? orders.length : orders.filter(o => o.status === label).length})</button>
                 ))}
               </div>
@@ -457,7 +461,7 @@ export default function SupplierDashboard() {
                         <button style={styles.actionBtn('#8b5cf6')} onClick={() => handleUpdateStatus(order.po_id, 'Shipped')}>Mark as Shipped</button>
                       )}
                       {order.status === 'Shipped' && (
-                        <span style={{fontSize:'14px', color:'#6b7280', fontStyle:'italic'}}>Waiting for receipt confirmation...</span>
+                        <button style={styles.actionBtn('#10b981')} onClick={() => handleUpdateStatus(order.po_id, 'Delivered')}>Complete Order</button>
                       )}
                       {order.status === 'Rejected' && order.denial_reason && (
                         <div style={{ fontSize: '13px', color: '#ef4444', fontStyle: 'italic', fontWeight: '600' }}>
@@ -508,12 +512,11 @@ export default function SupplierDashboard() {
                     <th style={styles.th}>Summary</th>
                     <th style={styles.th}>Total</th>
                     <th style={styles.th}>Status</th>
-                    <th style={styles.th}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {orders.length === 0 ? (
-                    <tr><td colSpan="6" style={{...styles.td, textAlign:'center'}}>No purchase orders found.</td></tr>
+                    <tr><td colSpan="5" style={{...styles.td, textAlign:'center'}}>No purchase orders found.</td></tr>
                   ) : orders.map(order => (
                     <tr key={order.po_id}>
                       <td style={styles.td}>
@@ -530,12 +533,6 @@ export default function SupplierDashboard() {
                       </td>
                       <td style={styles.td}>LKR {Number(order.total_amount).toLocaleString()}</td>
                       <td style={styles.td}><span style={styles.statusTag(order.status)}>{order.status}</span></td>
-                      <td style={styles.td}>
-                        <div style={{display:'flex', gap:'10px', color:'#6b7280'}}>
-                          <MdVisibility style={{cursor:'pointer'}} title="View Details" />
-                          {order.status === 'Pending' && <MdCheckCircle style={{cursor:'pointer', color:'#10b981'}} title="Confirm" onClick={() => handleUpdateStatus(order.po_id, 'Confirmed')} />}
-                        </div>
-                      </td>
                     </tr>
                   ))}
                 </tbody>

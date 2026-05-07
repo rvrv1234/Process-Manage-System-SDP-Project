@@ -2,7 +2,7 @@ const pool = require('../config/db');
 const { logAudit } = require('../utils/auditLogger');
 const { notifyUsersByRole } = require('../utils/notificationHelper');
 
-// 1. Get All Production Batches
+// Get All Production Batches
 const getBatches = async (req, res) => {
     try {
         const query = `
@@ -19,7 +19,7 @@ const getBatches = async (req, res) => {
     }
 };
 
-// 2. Update Batch Status (Now handles Order Bundles by order_id)
+// Update Batch Status 
 const updateBatchStatus = async (req, res) => {
     const { id } = req.params; 
     console.log('Attempting to start production for ID:', id);
@@ -29,8 +29,8 @@ const updateBatchStatus = async (req, res) => {
     try {
         await client.query('BEGIN');
 
-        // Bypassing 'orders_status_check': Not needed anymore! The constraints have been globally updated to accept 'Ready for Delivery'.
-        // Synchronizing explicitly per User Instruction: orders.status and production_batches BOTH get 'Ready for Delivery'
+        
+        
         let orderStatus = status === 'Completed' ? 'READY FOR DELIVERY' : 'PROCESSING';
         await client.query("UPDATE orders SET status = $1 WHERE order_id = $2", [orderStatus, id]);
 
@@ -54,11 +54,11 @@ const updateBatchStatus = async (req, res) => {
                 console.error('Non-critical error creating delivery record:', deliveryErr.message);
             }
 
-            // --- NOTIFICATION: Inform all delivery staff a new pickup is available ---
+            // Inform all delivery staff a new pickup is available 
             await notifyUsersByRole('delivery_manager', `🚚 A new delivery is available! Order #${id} is ready for pickup.`, 'info');
         }
 
-        // Audit Log Fix: Ensure req.user.id exists securely before passing it.
+        
         if (!req.user || !req.user.id) {
             console.error('Audit Log Blocked: req.user.id is officially undefined!');
         } else {
@@ -76,7 +76,7 @@ const updateBatchStatus = async (req, res) => {
     }
 };
 
-// 3. Get Grouped Orders for Bundling
+// Get Grouped Orders for Bundling
 const getGroupedOrders = async (req, res) => {
     try {
         const query = `

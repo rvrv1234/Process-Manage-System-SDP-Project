@@ -1,9 +1,6 @@
 const pool = require('../config/db');
 
-/**
- * GET /api/notifications/:userId
- * Returns the 50 most recent notifications for a user, newest first.
- */
+// get api
 const getNotifications = async (req, res) => {
     const { userId } = req.params;
     try {
@@ -22,10 +19,7 @@ const getNotifications = async (req, res) => {
     }
 };
 
-/**
- * PUT /api/notifications/:userId/read
- * Marks ALL notifications as read for the given user.
- */
+// mark all as read
 const markAllAsRead = async (req, res) => {
     const { userId } = req.params;
     try {

@@ -25,8 +25,8 @@ const isDelivery = (req, res, next) => {
     if (req.user && req.user.role === 'delivery') {
         next();
     } else {
-        // We'll allow any valid user to fetch for now to prevent breaking changes,
-        // but typically you enforce roles here.
+        // allow any valid user to fetch for now to prevent breaking changes,
+        
         next();
     }
 };

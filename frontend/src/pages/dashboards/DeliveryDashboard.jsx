@@ -15,7 +15,7 @@ export default function DeliveryDashboard() {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const navigate = useNavigate();
 
-  // --- API DATA STATES ---
+  // API DATA STATES 
   const [availableOrders, setAvailableOrders] = useState([]);
   const [myDeliveries, setMyDeliveries] = useState([]);
 
@@ -77,7 +77,10 @@ export default function DeliveryDashboard() {
     return address.split(',').pop().trim(); // Fallback to last segment
   };
 
-  const currentDelivery = myDeliveries.find(d => d.status === 'PICKED_UP' || d.status === 'ASSIGNED') || null;
+  const activeDeliveries = myDeliveries.filter(d => d.status === 'PICKED_UP' || d.status === 'ASSIGNED');
+  const activeDeliveriesCount = activeDeliveries.length;
+  const pendingDeliveriesCount = availableOrders.length;
+  const completedDeliveriesCount = myDeliveries.filter(d => d.status === 'DELIVERED' || d.status === 'COMPLETED').length;
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -85,7 +88,7 @@ export default function DeliveryDashboard() {
     navigate('/login');
   };
 
-  // --- STYLES ---
+  //  STYLES 
   const styles = {
     // 1. MAIN LAYOUT (Full Screen Fix)
     mainWrapper: {
@@ -219,34 +222,36 @@ export default function DeliveryDashboard() {
 
             {/* Stats Cards */}
             <div style={styles.statsGrid}>
-              <div style={styles.statCard}><div style={{display:'flex',justifyContent:'space-between'}}><div style={styles.iconBox('#f59e0b')}><MdLocalShipping /></div><span style={{color:'#10b981',fontWeight:'600'}}>↑ +2</span></div><div><div style={{fontSize:'32px',fontWeight:'700'}}>3</div><div style={{fontSize:'14px',color:'#6b7280'}}>Active Deliveries</div></div></div>
-              <div style={styles.statCard}><div style={{display:'flex',justifyContent:'space-between'}}><div style={styles.iconBox('#eab308')}><MdAccessTime /></div></div><div><div style={{fontSize:'32px',fontWeight:'700'}}>1</div><div style={{fontSize:'14px',color:'#6b7280'}}>Pending Assign</div><div style={{fontSize:'12px',color:'#9ca3af'}}>Waiting for acceptance</div></div></div>
-              <div style={styles.statCard}><div style={{display:'flex',justifyContent:'space-between'}}><div style={styles.iconBox('#10b981')}><MdCheckCircle /></div><span style={{color:'#10b981',fontWeight:'600'}}>↑ +4</span></div><div><div style={{fontSize:'32px',fontWeight:'700'}}>4</div><div style={{fontSize:'14px',color:'#6b7280'}}>Completed Today</div></div></div>
+              <div style={styles.statCard}><div style={{display:'flex',justifyContent:'space-between'}}><div style={styles.iconBox('#f59e0b')}><MdLocalShipping /></div></div><div><div style={{fontSize:'32px',fontWeight:'700'}}>{activeDeliveriesCount}</div><div style={{fontSize:'14px',color:'#6b7280'}}>Active Deliveries</div></div></div>
+              <div style={styles.statCard}><div style={{display:'flex',justifyContent:'space-between'}}><div style={styles.iconBox('#eab308')}><MdAccessTime /></div></div><div><div style={{fontSize:'32px',fontWeight:'700'}}>{pendingDeliveriesCount}</div><div style={{fontSize:'14px',color:'#6b7280'}}>Pending Deliveries</div><div style={{fontSize:'12px',color:'#9ca3af'}}>Available for pickup</div></div></div>
+              <div style={styles.statCard}><div style={{display:'flex',justifyContent:'space-between'}}><div style={styles.iconBox('#10b981')}><MdCheckCircle /></div></div><div><div style={{fontSize:'32px',fontWeight:'700'}}>{completedDeliveriesCount}</div><div style={{fontSize:'14px',color:'#6b7280'}}>Completed Deliveries</div></div></div>
             </div>
 
-            {/* Current Delivery Card */}
-            {currentDelivery ? (
-            <div style={styles.deliveryCard}>
-              <div style={styles.dcHeader}>
-                <div><h3 style={{fontSize:'20px', fontWeight:'700', marginBottom:'5px'}}>Current Active Delivery</h3><p style={{color:'#6b7280'}}>Order ID: {currentDelivery.id}</p></div>
-                <span style={styles.statusBadge(currentDelivery.status)}>{currentDelivery.status}</span>
-              </div>
-              
-              <div style={styles.dcDetailRow}>
-                <div style={styles.dcDetailItem}><div style={styles.iconBox('#f3f4f6')}><MdLocationOn color="#f59e0b"/></div><div><div style={{fontSize:'12px',color:'#6b7280'}}>Destination City</div><div style={{fontWeight:'600'}}>{extractCity(currentDelivery.delivery)}</div></div></div>
-                <div style={styles.dcDetailItem}><div style={styles.iconBox('#f3f4f6')}><MdAccessTime color="#f59e0b"/></div><div><div style={{fontSize:'12px',color:'#6b7280'}}>Deadline</div><div style={{fontWeight:'600'}}>{new Date(currentDelivery.deadline).toLocaleDateString()}</div></div></div>
-                <div style={styles.dcDetailItem}><div style={styles.iconBox('#f3f4f6')}><MdDirectionsCar color="#f59e0b"/></div><div><div style={{fontSize:'12px',color:'#6b7280'}}>Vehicle</div><div style={{fontWeight:'600'}}>Delivery Fleet</div></div></div>
-              </div>
+            {/* Current Delivery Cards */}
+            {activeDeliveries.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                {activeDeliveries.map(currentDelivery => (
+                  <div key={currentDelivery.id} style={styles.deliveryCard}>
+                    <div style={styles.dcHeader}>
+                      <div><h3 style={{fontSize:'20px', fontWeight:'700', marginBottom:'5px'}}>Current Active Delivery</h3><p style={{color:'#6b7280'}}>Order ID: {currentDelivery.id}</p></div>
+                      <span style={styles.statusBadge(currentDelivery.status)}>{currentDelivery.status}</span>
+                    </div>
+                    
+                    <div style={{...styles.dcDetailRow, gridTemplateColumns: '1fr'}}>
+                      <div style={styles.dcDetailItem}><div style={styles.iconBox('#f3f4f6')}><MdLocationOn color="#f59e0b"/></div><div><div style={{fontSize:'12px',color:'#6b7280'}}>Destination City</div><div style={{fontWeight:'600'}}>{extractCity(currentDelivery.delivery)}</div></div></div>
+                    </div>
 
-              <div style={styles.progressContainer}>
-                <div style={styles.progressLabels}><span>Picked Up</span><span>In Transit</span><span>Delivered</span></div>
-                <div style={styles.progressBarTrack}><div style={styles.progressBarFill(50)}></div></div>
-              </div>
+                    <div style={styles.progressContainer}>
+                      <div style={styles.progressLabels}><span>Picked Up</span><span>In Transit</span><span>Delivered</span></div>
+                      <div style={styles.progressBarTrack}><div style={styles.progressBarFill(50)}></div></div>
+                    </div>
 
-              <div style={styles.dcActions}>
-                <button onClick={() => handleCompleteDelivery(currentDelivery.delivery_id)} style={styles.primaryBtn}><MdLocalShipping /> Complete Delivery</button>
+                    <div style={styles.dcActions}>
+                      <button onClick={() => handleCompleteDelivery(currentDelivery.delivery_id)} style={styles.primaryBtn}><MdLocalShipping /> Complete Delivery</button>
+                    </div>
+                  </div>
+                ))}
               </div>
-            </div>
             ) : (
                 <div style={{backgroundColor:'white', padding:'40px', borderRadius:'16px', textAlign:'center', border:'1px dashed #d1d5db', color:'#6b7280'}}>
                     <MdLocalShipping size={48} color="#e5e7eb" style={{marginBottom:'10px'}}/>
@@ -264,8 +269,8 @@ export default function DeliveryDashboard() {
               <div><h1 style={styles.pageTitle}>Available Orders</h1><p style={styles.pageSubtitle}>Packages waiting in the warehouse to be claimed</p></div>
             </div>
 
-            <div style={styles.smallStatsGrid}>
-              {[{l:'Waiting for Pickup',v:availableOrders.length,c:'#f59e0b',i:<MdShoppingCart/>},{l:'Urgent Deliveries',v:0,c:'#ef4444',i:<MdAccessTime/>}].map((s,i)=>(
+            <div style={{...styles.smallStatsGrid, gridTemplateColumns: 'repeat(2, 1fr)'}}>
+              {[{l:'Waiting for Pickup',v:availableOrders.length,c:'#f59e0b',i:<MdShoppingCart/>}].map((s,i)=>(
                 <div key={i} style={styles.smallStatCard}><div style={{...styles.iconBox(s.c),width:'45px',height:'45px',fontSize:'22px'}}>{s.i}</div><div><div style={{fontSize:'12px',color:'#6b7280'}}>{s.l}</div><div style={{fontSize:'20px',fontWeight:'700'}}>{s.v}</div></div></div>
               ))}
             </div>
@@ -276,7 +281,7 @@ export default function DeliveryDashboard() {
                 <div style={styles.searchBox}><MdSearch color="#9ca3af" size={22} /><input type="text" placeholder="Search locations..." style={styles.searchInput} /></div>
               </div>
               <table style={styles.table}>
-                <thead><tr><th style={styles.th}>Order #ID</th><th style={styles.th}>City / Area</th><th style={styles.th}>Full Address</th><th style={styles.th}>Contents</th><th style={styles.th}>Status</th><th style={styles.th}>Actions</th></tr></thead>
+                <thead><tr><th style={styles.th}>Order #ID</th><th style={styles.th}>City / Area</th><th style={styles.th}>Full Address</th><th style={styles.th}>Contents</th><th style={styles.th}>Actions</th></tr></thead>
                 <tbody>
                   {availableOrders.map(o => (
                     <tr key={o.id}>
@@ -289,14 +294,11 @@ export default function DeliveryDashboard() {
                             <div style={{fontSize:'13px', lineHeight:'1.4', maxWidth:'250px'}}>{o.items}</div>
                         </td>
                         <td style={styles.td}>
-                            <span style={styles.statusBadge(o.status)}>{o.status}</span>
-                        </td>
-                        <td style={styles.td}>
                             <button onClick={() => handleClaimOrder(o.id)} style={{...styles.primaryBtn, backgroundColor:'#10b981', padding:'8px 16px'}}><MdCheckCircle /> Accept Order</button>
                         </td>
                     </tr>
                   ))}
-                  {availableOrders.length === 0 && <tr><td colSpan="6" style={{textAlign:'center', padding:'30px', color:'#6b7280'}}>No available orders right now.</td></tr>}
+                  {availableOrders.length === 0 && <tr><td colSpan="5" style={{textAlign:'center', padding:'30px', color:'#6b7280'}}>No available orders right now.</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -313,12 +315,9 @@ export default function DeliveryDashboard() {
             <div style={styles.tableCard}>
               <div style={styles.tableToolbar}>
                 <h3 style={{fontSize:'18px', fontWeight:'600'}}>Your Delivery Queue</h3>
-                <div style={{display:'flex', gap:'10px'}}>
-                  <button style={styles.outlineBtn}><MdFileDownload /> Export</button>
-                </div>
               </div>
               <table style={styles.table}>
-                <thead><tr><th style={styles.th}>Order ID</th><th style={styles.th}>Destination</th><th style={styles.th}>Date</th><th style={styles.th}>Contents</th><th style={styles.th}>Status</th><th style={styles.th}>Actions</th></tr></thead>
+                <thead><tr><th style={styles.th}>Order ID</th><th style={styles.th}>Destination</th><th style={styles.th}>Date</th><th style={styles.th}>Contents</th><th style={styles.th}>Status</th></tr></thead>
                 <tbody>
                   {myDeliveries.map(d => (
                     <tr key={d.id}>
@@ -330,16 +329,9 @@ export default function DeliveryDashboard() {
                         <td style={styles.td}>{new Date(d.date).toLocaleDateString()}</td>
                         <td style={styles.td}><div style={{fontSize:'13px', lineHeight:'1.4', maxWidth:'200px'}}>{d.items}</div></td>
                         <td style={styles.td}><span style={styles.statusBadge(d.status)}>{d.status}</span></td>
-                        <td style={styles.td}>
-                            {d.status !== 'DELIVERED' && d.status !== 'COMPLETED' ? (
-                                <button style={{...styles.primaryBtn, backgroundColor:'#3b82f6', padding:'6px 12px'}}><MdLocalShipping /> Process</button>
-                            ) : (
-                                <span style={{color:'#10b981', fontSize:'13px', fontWeight:'600'}}>Completed</span>
-                            )}
-                        </td>
                     </tr>
                   ))}
-                  {myDeliveries.length === 0 && <tr><td colSpan="6" style={{textAlign:'center', padding:'30px', color:'#6b7280'}}>You have no assigned deliveries.</td></tr>}
+                  {myDeliveries.length === 0 && <tr><td colSpan="5" style={{textAlign:'center', padding:'30px', color:'#6b7280'}}>You have no assigned deliveries.</td></tr>}
                 </tbody>
               </table>
             </div>
